@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contact — EGO</title>
+<link rel="icon" href="images/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="logo" href="index.html">EGO</a>
+    <nav class="main-nav">
+      <a href="index.html">Home</a>
+      <a href="shop.html">Shop</a>
+      <a href="about.html">About</a>
+      <a href="contact.html" class="active">Contact</a>
+    </nav>
+    <div class="header-actions">
+      <a class="cart-link" href="cart.html">Cart<span class="cart-count">0</span></a>
+      <button class="nav-toggle" aria-label="Toggle menu">&#9776;</button>
+    </div>
+  </div>
+</header>
+
+<section class="container" style="padding-top:56px;">
+  <div class="two-col">
+    <div>
+      <div class="section-heading" style="flex-direction:column; align-items:flex-start; gap:8px;">
+        <h2>Get in Touch</h2>
+      </div>
+      <p style="color:#6b6b6b; margin-bottom:24px;">
+        Questions about an order, sizing, or a wholesale inquiry? Send us a message and
+        we'll get back to you within 1-2 business days.
+      </p>
+      <p style="font-size:14px; color:#6b6b6b;">
+        Email: <strong>hello@wearego.com</strong><br>
+        Hours: Mon&ndash;Fri, 9am&ndash;6pm
+      </p>
+    </div>
+    <div>
+      <form class="contact-form" id="contact-form">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" required>
+
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required>
+
+        <label for="message">Message</label>
+        <textarea id="message" name="message" required></textarea>
+
+        <button class="btn" type="submit" style="width:100%;">Send Message</button>
+        <p id="contact-msg" style="margin-top:16px; font-size:14px; color:#c8102e;"></p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-bottom">
+      <span>&copy; 2026 EGO. All rights reserved.</span>
+      <span>Designed for those who define themselves.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="js/cart.js"></script>
+<script src="js/main.js"></script>
+<script>
+  document.getElementById("contact-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    document.getElementById("contact-msg").textContent =
+      "Thanks for reaching out! We'll reply within 1-2 business days.";
+    e.target.reset();
+  });
+</script>
+</body>
+</html>

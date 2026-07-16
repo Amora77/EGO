@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EGO — Wear Your Own Name</title>
+<meta name="description" content="EGO is a clothing brand for people who define themselves. Shop hoodies, tees, jackets and accessories.">
+<link rel="icon" href="images/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="logo" href="index.html">EGO</a>
+    <nav class="main-nav">
+      <a href="index.html" class="active">Home</a>
+      <a href="shop.html">Shop</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+    <div class="header-actions">
+      <a class="cart-link" href="cart.html">Cart<span class="cart-count">0</span></a>
+      <button class="nav-toggle" aria-label="Toggle menu">&#9776;</button>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <img src="images/hero.svg" alt="EGO clothing brand">
+  <div class="hero-content">
+    <h1>EGO</h1>
+    <p>Wear Your Own Name</p>
+    <a class="btn btn-light" href="shop.html">Shop the Collection</a>
+  </div>
+</section>
+
+<section class="container">
+  <div class="section-heading">
+    <h2>Featured</h2>
+    <a href="shop.html">View All</a>
+  </div>
+  <div class="product-grid" id="featured-grid"></div>
+</section>
+
+<section class="container" style="text-align:center; max-width:720px;">
+  <div class="section-heading" style="justify-content:center; text-align:center; flex-direction:column; gap:16px;">
+    <h2>Built On Confidence</h2>
+  </div>
+  <p style="color:#6b6b6b; font-size:16px;">
+    EGO makes clothing for people who don't ask permission to take up space. Heavyweight
+    fabrics, considered fits, and details built to last — designed in small batches so every
+    drop stays intentional.
+  </p>
+  <a class="btn btn-outline" href="about.html" style="margin-top:24px;">Our Story</a>
+</section>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <h3>EGO</h3>
+        <p>A clothing brand for people who define themselves. Designed with intent, made to last.</p>
+      </div>
+      <div>
+        <h3>Shop</h3>
+        <ul>
+          <li><a href="shop.html?category=Hoodies">Hoodies</a></li>
+          <li><a href="shop.html?category=T-Shirts">T-Shirts</a></li>
+          <li><a href="shop.html?category=Jackets">Jackets</a></li>
+          <li><a href="shop.html?category=Accessories">Accessories</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Company</h3>
+        <ul>
+          <li><a href="about.html">About</a></li>
+          <li><a href="contact.html">Contact</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Help</h3>
+        <ul>
+          <li><a href="contact.html">Shipping &amp; Returns</a></li>
+          <li><a href="contact.html">Size Guide</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&copy; 2026 EGO. All rights reserved.</span>
+      <span>Designed for those who define themselves.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="js/products.js"></script>
+<script src="js/cart.js"></script>
+<script src="js/render.js"></script>
+<script src="js/home.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
