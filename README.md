@@ -18,8 +18,13 @@ disabled; a local gateway like Paymob is planned for a later phase).
   server-side (card payments via Stripe are implemented too but disabled —
   see **Payments** below)
 - Admin panel (`/admin`) — login, product catalog management (including
-  image upload), sale pricing (old price / new price / % off), order list
-  with delivery addresses, and marking Cash on Delivery orders as delivered
+  image upload), per-size stock/inventory, sale pricing (old price / new
+  price / % off), order list with delivery addresses, and marking Cash on
+  Delivery orders as delivered
+- Per-size stock tracking — customers can't select or order a sold-out size;
+  stock is atomically validated and decremented server-side when a Cash on
+  Delivery order is placed, so two concurrent orders can never both claim
+  the last unit (see **Inventory** below)
 - Order confirmation emails (optional, via any SMTP provider)
 - SQLite database (`data/ego.db`) — products, orders, accounts
 
@@ -121,6 +126,41 @@ order history, confirmation emails) breaks it down as Subtotal + Shipping =
 Total. The cart page's shipping line is a display-only mirror of the same
 constant; every other total shown comes directly from the server's own
 calculation, never recomputed or trusted from the browser.
+
+## Inventory
+
+Stock is tracked per product **size** (a `product_stock` table keyed on
+`(product_id, size)`), not per product — `products.sizes` still just lists
+which size labels a product offers, unchanged from before; `product_stock`
+separately tracks how many of each are left. Manage it from the same
+Add/Edit Product form in the admin panel (`/admin/products.html`) — a number
+input appears per size, live-updated as you edit the size list.
+
+On the product page, a size with 0 stock is shown disabled with a "Sold Out"
+label and can't be selected; "Add to Cart" is disabled if the selected size
+has none left. That's a UX convenience only — **the server is the actual
+authority**. `POST /api/orders/cod` re-validates and decrements stock for
+every line itself, regardless of what the browser showed, inside one SQL
+transaction per order:
+
+```sql
+UPDATE product_stock SET stock = stock - ? WHERE product_id = ? AND size = ? AND stock >= ?
+```
+
+The "is there enough?" check and the decrement happen in that single
+statement — that's what makes it safe against two customers checking out
+the same last unit at the same time; whichever request's `UPDATE` runs first
+wins, and the second's `WHERE stock >= ?` simply matches zero rows. If any
+item in an order can't be fulfilled, the whole order is rolled back — no
+partial decrements, and stock can never go negative (`CHECK (stock >= 0)` on
+the column itself, as a second guarantee independent of the application
+code). A brand new database seeds every existing product's sizes with a
+placeholder stock of **10** on first boot — replace with real numbers via
+the admin panel before/after launch.
+
+Order cancellation/restocking isn't built yet — `order_items` already
+records exactly what was ordered (product, size, quantity) if that's added
+later.
 
 ## Payments
 

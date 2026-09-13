@@ -83,6 +83,7 @@ function initProductsPage() {
   const priceField = document.getElementById("price");
   const compareAtPriceField = document.getElementById("compare-at-price");
   const sizesField = document.getElementById("sizes");
+  const stockFieldsContainer = document.getElementById("stock-fields");
   const descriptionField = document.getElementById("description");
   const imageField = document.getElementById("image");
   const heading = document.getElementById("form-heading");
@@ -90,9 +91,43 @@ function initProductsPage() {
   const cancelBtn = document.getElementById("product-cancel-btn");
   const formMsg = document.getElementById("product-form-msg");
 
+  function parseSizesInput(raw) {
+    return String(raw || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  // One number input per size, regenerated whenever the sizes field changes.
+  // Preserves whatever's currently typed for sizes that remain (so adding
+  // one more size doesn't wipe out stock already entered for the others);
+  // seedMap only fills in values the first time a product is loaded for editing.
+  function renderStockInputs(sizesList, seedMap = {}) {
+    const existing = {};
+    stockFieldsContainer.querySelectorAll(".stock-input").forEach((input) => {
+      existing[input.dataset.size] = input.value;
+    });
+    stockFieldsContainer.innerHTML = sizesList
+      .map((size) => {
+        const value = existing[size] !== undefined ? existing[size] : seedMap[size] != null ? seedMap[size] : 0;
+        return `
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <span style="font-size:12px; font-weight:600;">${escapeHtml(size)}</span>
+            <input type="number" min="0" step="1" class="stock-input" data-size="${escapeHtml(size)}" value="${value}" style="width:70px;">
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  sizesField.addEventListener("input", () => {
+    renderStockInputs(parseSizesInput(sizesField.value));
+  });
+
   function resetForm() {
     form.reset();
     idField.value = "";
+    stockFieldsContainer.innerHTML = "";
     heading.textContent = "Add Product";
     submitBtn.textContent = "Add Product";
     cancelBtn.style.display = "none";
@@ -113,6 +148,9 @@ function initProductsPage() {
           <td>${formatPrice(p.price)}</td>
           <td>${p.discountPercent != null ? `-${p.discountPercent}%` : "—"}</td>
           <td>${p.sizes.join(", ")}</td>
+          <td>${Object.entries(p.stock || {})
+            .map(([size, qty]) => `${escapeHtml(size)}:${qty}`)
+            .join(" ") || "—"}</td>
           <td>
             <button type="button" class="btn btn-outline admin-row-btn" data-action="edit">Edit</button>
             <button type="button" class="btn btn-outline admin-row-btn" data-action="delete">Delete</button>
@@ -145,6 +183,7 @@ function initProductsPage() {
       priceField.value = (product.price / 100).toFixed(2);
       compareAtPriceField.value = product.compareAtPrice != null ? (product.compareAtPrice / 100).toFixed(2) : "";
       sizesField.value = product.sizes.join(", ");
+      renderStockInputs(product.sizes, product.stock || {});
       descriptionField.value = product.description || "";
       heading.textContent = `Edit: ${product.name}`;
       submitBtn.textContent = "Save Changes";
@@ -167,6 +206,11 @@ function initProductsPage() {
       compareAtPriceField.value ? String(Math.round(Number.parseFloat(compareAtPriceField.value) * 100)) : ""
     );
     formData.set("sizes", sizesField.value);
+    const stockObj = {};
+    stockFieldsContainer.querySelectorAll(".stock-input").forEach((input) => {
+      stockObj[input.dataset.size] = input.value;
+    });
+    formData.set("stock", JSON.stringify(stockObj));
     formData.set("description", descriptionField.value);
     if (imageField.files[0]) {
       formData.set("image", imageField.files[0]);

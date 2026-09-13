@@ -62,9 +62,16 @@ function buildOrderItems(items) {
       throw new Error(`Invalid quantity for ${product.name}.`);
     }
 
+    // If the product has sizes at all, a valid one is required — not just
+    // "valid if provided". Previously this only checked `item.size &&
+    // !sizes.includes(...)`, so a client that omitted `size` entirely
+    // slipped through unvalidated as size: null, which (now that stock is
+    // tracked per size) would also skip stock enforcement for that line.
+    // Products with no sizes at all (sizes.length === 0) are unaffected —
+    // they're not size- or stock-tracked, same as before.
     const sizes = JSON.parse(product.sizes || "[]");
-    if (item.size && !sizes.includes(item.size)) {
-      throw new Error(`Invalid size for ${product.name}.`);
+    if (sizes.length > 0 && !sizes.includes(item.size)) {
+      throw new Error(`Please select a valid size for ${product.name}.`);
     }
 
     const name = item.size ? `${product.name} (${item.size})` : product.name;
@@ -90,10 +97,55 @@ module.exports = function createOrdersRouter({ stripe, clientUrl, checkoutLimite
     `INSERT INTO order_items (order_id, product_id, product_name, size, qty, unit_amount)
      VALUES (?, ?, ?, ?, ?, ?)`
   );
+  // The check ("is there enough?") and the write ("take it") happen in the
+  // same statement via the WHERE clause — that's what makes this safe
+  // against two concurrent orders both succeeding against the same last
+  // unit. changes === 0 means either the row doesn't exist or stock was
+  // insufficient at the moment this ran; either way, not enough to fulfill.
+  const decrementStockStmt = db.prepare(
+    "UPDATE product_stock SET stock = stock - ? WHERE product_id = ? AND size = ? AND stock >= ?"
+  );
 
   function insertOrderItems(orderId, orderItems) {
     for (const oi of orderItems) {
       insertItemStmt.run(orderId, oi.product_id, oi.product_name, oi.size, oi.qty, oi.unit_amount);
+    }
+  }
+
+  // Atomically checks-and-decrements stock for every line, then creates the
+  // order — all in one transaction, so a shortfall on any single item rolls
+  // back everything (no partial decrements) and never leaves the order
+  // created without the stock to back it. BEGIN IMMEDIATE takes the write
+  // lock up front rather than lazily on first write. Products with no size
+  // (none exist in the current catalog, but the schema doesn't forbid it)
+  // aren't stock-tracked — there's no per-size row to check.
+  function createCodOrder({ orderTotal, userId, email, shippingJson, confirmationToken, orderItems }) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const item of orderItems) {
+        if (!item.size) continue;
+        const result = decrementStockStmt.run(item.qty, item.product_id, item.size, item.qty);
+        if (result.changes !== 1) {
+          const err = new Error(`${item.product_name} is no longer available in that quantity.`);
+          err.isStockError = true;
+          throw err;
+        }
+      }
+
+      const orderId = db
+        .prepare(
+          `INSERT INTO orders (status, payment_method, amount_total, user_id, email, shipping_address, confirmation_token)
+           VALUES ('placed', 'cod', ?, ?, ?, ?, ?)`
+        )
+        .run(orderTotal, userId, email, shippingJson, confirmationToken).lastInsertRowid;
+
+      insertOrderItems(orderId, orderItems);
+
+      db.exec("COMMIT");
+      return orderId;
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
     }
   }
 
@@ -211,14 +263,16 @@ module.exports = function createOrdersRouter({ stripe, clientUrl, checkoutLimite
     const userId = req.user ? req.user.sub : null;
     const confirmationToken = crypto.randomBytes(16).toString("hex");
 
-    const orderId = db
-      .prepare(
-        `INSERT INTO orders (status, payment_method, amount_total, user_id, email, shipping_address, confirmation_token)
-         VALUES ('placed', 'cod', ?, ?, ?, ?, ?)`
-      )
-      .run(orderTotal, userId, email, shippingJson, confirmationToken).lastInsertRowid;
-
-    insertOrderItems(orderId, orderItems);
+    let orderId;
+    try {
+      orderId = createCodOrder({ orderTotal, userId, email, shippingJson, confirmationToken, orderItems });
+    } catch (err) {
+      if (err.isStockError) {
+        return res.status(409).json({ error: err.message });
+      }
+      console.error("COD order creation error:", err.message);
+      return res.status(500).json({ error: "Unable to place your order. Please try again." });
+    }
 
     // Fire-and-forget: this response shouldn't wait on (or fail because of) email delivery.
     sendOrderConfirmation({

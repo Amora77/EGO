@@ -419,6 +419,22 @@ section {
   color: var(--white);
 }
 
+.size-option.sold-out {
+  cursor: not-allowed;
+  color: var(--gray);
+  background: var(--off-white);
+  position: relative;
+}
+
+.size-option.sold-out .sold-out-label {
+  display: block;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
 .quantity-row {
   display: flex;
   align-items: center;

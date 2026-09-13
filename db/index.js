@@ -66,6 +66,18 @@ db.exec(`
     used_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  -- Per-size stock. Separate from products.sizes (which remains just the
+  -- list of size labels a product offers) so a decrement can be a single
+  -- atomic "UPDATE ... WHERE stock >= ?" on a plain integer column — the
+  -- guard that actually prevents overselling under concurrent requests.
+  -- ON DELETE CASCADE relies on PRAGMA foreign_keys = ON above.
+  CREATE TABLE IF NOT EXISTS product_stock (
+    product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    size TEXT NOT NULL,
+    stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0),
+    PRIMARY KEY (product_id, size)
+  );
 `);
 
 // CREATE TABLE IF NOT EXISTS doesn't retroactively add columns to a table
@@ -87,5 +99,29 @@ ensureColumn("products", "compare_at_price_cents", "INTEGER");
 // so enforce it with an index instead (NULLs — i.e. card orders — don't
 // conflict with each other under SQLite's uniqueness rules).
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_confirmation_token ON orders(confirmation_token)");
+
+// One-time backfill: give every size of every existing product a starting
+// stock row. 10 is a deliberate placeholder for the current catalog (not 0,
+// so nothing on the live site shows as sold out the moment this ships; not
+// 100, per the explicit product decision) — it's meant to be replaced with
+// real inventory numbers via the admin UI before/after launch. INSERT OR
+// IGNORE keyed on the (product_id, size) primary key makes this safe to run
+// on every boot: existing stock rows (including ones an admin has already
+// edited) are never touched, only missing ones are created.
+const BACKFILL_STOCK = 10;
+const backfillStockStmt = db.prepare(
+  "INSERT OR IGNORE INTO product_stock (product_id, size, stock) VALUES (?, ?, ?)"
+);
+for (const product of db.prepare("SELECT id, sizes FROM products").all()) {
+  let sizes;
+  try {
+    sizes = JSON.parse(product.sizes || "[]");
+  } catch {
+    sizes = [];
+  }
+  for (const size of sizes) {
+    backfillStockStmt.run(product.id, size, BACKFILL_STOCK);
+  }
+}
 
 module.exports = db;

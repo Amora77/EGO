@@ -20,7 +20,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   document.title = `${product.name} — EGO`;
 
-  let selectedSize = product.sizes[0];
+  // Missing stock data for a size is treated as sold out (0), not
+  // "unlimited" — the safe default when the backend hasn't reported a
+  // quantity for it.
+  const stockFor = (size) => (product.stock && product.stock[size] != null ? product.stock[size] : 0);
+
+  let selectedSize = product.sizes.find((s) => stockFor(s) > 0) || product.sizes[0];
   let qty = 1;
 
   const onSale = product.discountPercent != null;
@@ -43,10 +48,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         <div class="label">Size</div>
         <div class="size-options">
           ${product.sizes
-            .map(
-              (s, i) =>
-                `<div class="size-option${i === 0 ? " selected" : ""}" data-size="${s}">${s}</div>`
-            )
+            .map((s) => {
+              const soldOut = stockFor(s) <= 0;
+              return `<div class="size-option${s === selectedSize ? " selected" : ""}${soldOut ? " sold-out" : ""}" data-size="${s}">${s}${soldOut ? '<span class="sold-out-label">Sold Out</span>' : ""}</div>`;
+            })
             .join("")}
         </div>
       </div>
@@ -65,13 +70,25 @@ document.addEventListener("DOMContentLoaded", async () => {
     </div>
   `;
 
+  const addToCartBtn = root.querySelector("#add-to-cart-btn");
+
+  function updateAddToCartState() {
+    const soldOut = stockFor(selectedSize) <= 0;
+    addToCartBtn.disabled = soldOut;
+    addToCartBtn.textContent = soldOut ? "Sold Out" : "Add to Cart";
+  }
+
   root.querySelectorAll(".size-option").forEach((el) => {
     el.addEventListener("click", () => {
+      if (el.classList.contains("sold-out")) return;
       root.querySelectorAll(".size-option").forEach((s) => s.classList.remove("selected"));
       el.classList.add("selected");
       selectedSize = el.dataset.size;
+      updateAddToCartState();
     });
   });
+
+  updateAddToCartState();
 
   root.querySelector('[data-action="increase"]').addEventListener("click", () => {
     qty += 1;
@@ -83,7 +100,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     root.querySelector("#qty-value").textContent = qty;
   });
 
-  root.querySelector("#add-to-cart-btn").addEventListener("click", () => {
+  addToCartBtn.addEventListener("click", () => {
+    if (stockFor(selectedSize) <= 0) return;
     addToCart(product.id, selectedSize, qty);
     document.getElementById("add-to-cart-msg").textContent = `Added ${qty} × ${product.name} (${selectedSize}) to your cart.`;
   });

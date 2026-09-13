@@ -53,6 +53,55 @@ function parseSizes(raw) {
     .filter(Boolean);
 }
 
+const stockStmt = db.prepare("SELECT size, stock FROM product_stock WHERE product_id = ?");
+const upsertStockStmt = db.prepare(
+  `INSERT INTO product_stock (product_id, size, stock) VALUES (?, ?, ?)
+   ON CONFLICT (product_id, size) DO UPDATE SET stock = excluded.stock`
+);
+
+function getStockMap(productId) {
+  const map = {};
+  for (const row of stockStmt.all(productId)) {
+    map[row.size] = row.stock;
+  }
+  return map;
+}
+
+// Parses the admin form's stock field — a JSON object of size -> quantity —
+// tolerating missing/malformed input rather than throwing, since a bad stock
+// value shouldn't block saving the rest of the product.
+function parseStockInput(raw) {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+// Keeps product_stock in sync with a product's current size list: every size
+// still offered gets an upserted row (missing/invalid quantities default to
+// 0 — a brand new size starts with nothing to sell until an admin sets a
+// real number), and rows for sizes no longer offered are removed so stock
+// data never goes stale/orphaned.
+function syncProductStock(productId, sizesList, stockInput) {
+  if (sizesList.length) {
+    const placeholders = sizesList.map(() => "?").join(",");
+    db.prepare(`DELETE FROM product_stock WHERE product_id = ? AND size NOT IN (${placeholders})`).run(
+      productId,
+      ...sizesList
+    );
+  } else {
+    db.prepare("DELETE FROM product_stock WHERE product_id = ?").run(productId);
+  }
+
+  for (const size of sizesList) {
+    const qty = Number.parseInt(stockInput[size], 10);
+    upsertStockStmt.run(productId, size, Number.isInteger(qty) && qty >= 0 ? qty : 0);
+  }
+}
+
 function serializeProduct(row) {
   const price = row.price_cents;
   const rawCompareAt = row.compare_at_price_cents;
@@ -85,13 +134,13 @@ function removeUploadedImage(imagePath) {
 
 router.get("/products", (req, res) => {
   const rows = db.prepare("SELECT * FROM products ORDER BY created_at ASC").all();
-  res.json(rows.map(serializeProduct));
+  res.json(rows.map((row) => ({ ...serializeProduct(row), stock: getStockMap(row.id) })));
 });
 
 router.get("/products/:id", (req, res) => {
   const row = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
   if (!row) return res.status(404).json({ error: "Product not found." });
-  res.json(serializeProduct(row));
+  res.json({ ...serializeProduct(row), stock: getStockMap(row.id) });
 });
 
 router.post("/admin/products", requireAdmin, upload.single("image"), (req, res) => {
@@ -124,14 +173,18 @@ router.post("/admin/products", requireAdmin, upload.single("image"), (req, res) 
   }
 
   const image = req.file ? `images/products/${req.file.filename}` : null;
-  const sizes = JSON.stringify(parseSizes(req.body.sizes));
+  const sizesList = parseSizes(req.body.sizes);
+  const sizes = JSON.stringify(sizesList);
 
   db.prepare(
     `INSERT INTO products (id, name, category, price_cents, compare_at_price_cents, image, description, sizes)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(id, name, category, priceCents, compareAtPriceCents, image, req.body.description || "", sizes);
 
-  res.status(201).json(serializeProduct(db.prepare("SELECT * FROM products WHERE id = ?").get(id)));
+  syncProductStock(id, sizesList, parseStockInput(req.body.stock));
+
+  const row = db.prepare("SELECT * FROM products WHERE id = ?").get(id);
+  res.status(201).json({ ...serializeProduct(row), stock: getStockMap(id) });
 });
 
 router.put("/admin/products/:id", requireAdmin, upload.single("image"), (req, res) => {
@@ -165,7 +218,8 @@ router.put("/admin/products/:id", requireAdmin, upload.single("image"), (req, re
     return res.status(400).json({ error: "Compare-at price must be higher than the price to represent a sale." });
   }
 
-  const sizes = req.body.sizes !== undefined ? JSON.stringify(parseSizes(req.body.sizes)) : existing.sizes;
+  const sizesList = req.body.sizes !== undefined ? parseSizes(req.body.sizes) : JSON.parse(existing.sizes || "[]");
+  const sizes = JSON.stringify(sizesList);
 
   let image = existing.image;
   if (req.file) {
@@ -179,7 +233,15 @@ router.put("/admin/products/:id", requireAdmin, upload.single("image"), (req, re
      WHERE id = ?`
   ).run(name, category, priceCents, compareAtPriceCents, image, description, sizes, req.params.id);
 
-  res.json(serializeProduct(db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id)));
+  // Only touch stock when the caller actually sent it — the admin Sale page,
+  // for instance, PUTs just price/compareAtPrice and must never reset stock
+  // to 0 as a side effect of an unrelated price change.
+  if (req.body.stock !== undefined) {
+    syncProductStock(req.params.id, sizesList, parseStockInput(req.body.stock));
+  }
+
+  const row = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
+  res.json({ ...serializeProduct(row), stock: getStockMap(req.params.id) });
 });
 
 router.delete("/admin/products/:id", requireAdmin, (req, res) => {
