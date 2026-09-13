@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Account — EGO</title>
+<link rel="icon" href="images/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="logo" href="index.html">EGO</a>
+    <nav class="main-nav">
+      <a href="index.html">Home</a>
+      <a href="shop.html">Shop</a>
+      <a href="sale.html">Sale</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+    <div class="header-actions">
+      <a class="cart-link" href="account.html">Account</a>
+      <a class="cart-link" href="cart.html">Cart<span class="cart-count">0</span></a>
+      <button class="nav-toggle" aria-label="Toggle menu">&#9776;</button>
+    </div>
+  </div>
+</header>
+
+<section class="container" id="guest-view" style="padding-top:56px; max-width:420px; display:none;">
+  <div class="section-heading" style="flex-direction:column; align-items:flex-start; gap:8px;">
+    <h2 id="auth-heading">Log In</h2>
+  </div>
+
+  <form class="contact-form" id="login-form">
+    <label for="login-email">Email</label>
+    <input type="email" id="login-email" required>
+
+    <label for="login-password">Password</label>
+    <input type="password" id="login-password" required>
+
+    <button class="btn" type="submit" style="width:100%;">Log In</button>
+    <p id="login-msg" style="margin-top:16px; font-size:14px; color:#c8102e;"></p>
+  </form>
+  <p id="show-signup-wrap" style="font-size:14px; color:#6b6b6b; margin-top:16px;">
+    New here? <a href="#" id="show-signup" style="text-decoration:underline;">Create an account</a>
+    &nbsp;&middot;&nbsp;
+    <a href="#" id="show-forgot" style="text-decoration:underline;">Forgot password?</a>
+  </p>
+
+  <form class="contact-form" id="signup-form" style="display:none;">
+    <label for="signup-email">Email</label>
+    <input type="email" id="signup-email" required>
+
+    <label for="signup-password">Password (min 8 characters)</label>
+    <input type="password" id="signup-password" required minlength="8">
+
+    <button class="btn" type="submit" style="width:100%;">Create Account</button>
+    <p id="signup-msg" style="margin-top:16px; font-size:14px; color:#c8102e;"></p>
+  </form>
+  <p id="show-login-wrap" style="display:none; font-size:14px; color:#6b6b6b; margin-top:16px;">
+    Already have an account? <a href="#" id="show-login" style="text-decoration:underline;">Log in</a>
+  </p>
+
+  <form class="contact-form" id="forgot-form" style="display:none;">
+    <label for="forgot-email">Email</label>
+    <input type="email" id="forgot-email" required>
+
+    <button class="btn" type="submit" style="width:100%;">Send Reset Link</button>
+    <p id="forgot-msg" style="margin-top:16px; font-size:14px;"></p>
+  </form>
+  <p id="show-login-from-forgot-wrap" style="display:none; font-size:14px; color:#6b6b6b; margin-top:16px;">
+    <a href="#" id="show-login-from-forgot" style="text-decoration:underline;">Back to log in</a>
+  </p>
+</section>
+
+<section class="container" id="account-view" style="padding-top:56px; display:none;">
+  <div class="section-heading">
+    <h2>My Orders</h2>
+    <button class="btn btn-outline" id="logout-btn">Log Out</button>
+  </div>
+  <p id="account-email" style="color:#6b6b6b; margin-top:-16px; margin-bottom:8px;"></p>
+  <div id="verify-banner" style="display:none; border:1px solid var(--light-gray); padding:14px 18px; margin-bottom:24px; font-size:14px; align-items:center; justify-content:space-between; gap:16px;">
+    <span>Your email isn't verified yet.</span>
+    <button type="button" class="btn btn-outline admin-row-btn" id="resend-verification-btn" style="margin-right:0;">Resend Email</button>
+  </div>
+  <div id="orders-list"></div>
+</section>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-bottom">
+      <span>&copy; 2026 EGO. All rights reserved.</span>
+      <span>Designed for those who define themselves.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="js/cart.js"></script>
+<script src="js/products.js"></script>
+<script src="js/account.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

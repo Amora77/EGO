@@ -1,7 +1,9 @@
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const grid = document.getElementById("shop-grid");
   const filterBar = document.getElementById("filter-bar");
   if (!grid || !filterBar) return;
+
+  await loadProducts();
 
   const categories = ["All", ...new Set(PRODUCTS.map((p) => p.category))];
 

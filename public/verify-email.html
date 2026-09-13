@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verify Email — EGO</title>
+<link rel="icon" href="images/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="logo" href="index.html">EGO</a>
+    <nav class="main-nav">
+      <a href="index.html">Home</a>
+      <a href="shop.html">Shop</a>
+      <a href="sale.html">Sale</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+    <div class="header-actions">
+      <a class="cart-link" href="account.html">Account</a>
+      <a class="cart-link" href="cart.html">Cart<span class="cart-count">0</span></a>
+      <button class="nav-toggle" aria-label="Toggle menu">&#9776;</button>
+    </div>
+  </div>
+</header>
+
+<section class="container status-page">
+  <h1 id="verify-heading">Verifying your email&hellip;</h1>
+  <p id="verify-message"></p>
+  <a class="btn" href="account.html">Go to My Account</a>
+</section>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-bottom">
+      <span>&copy; 2026 EGO. All rights reserved.</span>
+      <span>Designed for those who define themselves.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="js/cart.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", async () => {
+    updateCartBadge();
+
+    const heading = document.getElementById("verify-heading");
+    const message = document.getElementById("verify-message");
+    const token = new URLSearchParams(window.location.search).get("token");
+
+    if (!token) {
+      heading.textContent = "Missing verification link";
+      message.textContent = "This page needs a verification link from your email — please use the link we sent you.";
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/auth/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Unable to verify this email.");
+      heading.textContent = "Email verified";
+      message.textContent = "Your email address has been confirmed. Thanks!";
+    } catch (err) {
+      heading.textContent = "Verification failed";
+      message.textContent = err.message;
+    }
+  });
+</script>
+<script src="js/main.js"></script>
+</body>
+</html>

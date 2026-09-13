@@ -1,39 +1,58 @@
 # EGO
 
-An online store for the EGO clothing brand. Plain HTML/CSS/JS frontend with a
-small Node/Express backend that only exists to talk to Stripe (a browser can
-never hold a Stripe secret key safely).
+An online clothing store for the Egyptian market. Plain HTML/CSS/JS frontend,
+a small Node/Express + SQLite backend, prices in EGP, delivery restricted to
+Egypt, a fixed EGP 75.00 shipping fee per order, and **Cash on Delivery**
+as the only active payment method for now (Stripe code exists but is
+disabled; a local gateway like Paymob is planned for a later phase).
 
 ## Features
 
-- Home, Shop (with category filters), Product detail, Cart, About and Contact pages
+- Home, Shop, Sale, Product detail, Cart, About and Contact pages
+- Customer accounts — signup/login, email verification, password reset,
+  order history (`account.html`)
 - Client-side cart (localStorage) — add to cart, change quantity, remove items
-- Real checkout via [Stripe Checkout](https://stripe.com/docs/payments/checkout)
-- Order confirmation (`success.html`) and cancelled checkout (`cancel.html`) pages
-- Stripe webhook endpoint (`/webhook`) to receive `checkout.session.completed` events
+- Checkout: **Cash on Delivery** (customer enters a full delivery address,
+  order gets an order number like `EGO-00042` for you to hand to a courier)
+  plus a fixed **EGP 75.00 shipping fee** added to every order, computed
+  server-side (card payments via Stripe are implemented too but disabled —
+  see **Payments** below)
+- Admin panel (`/admin`) — login, product catalog management (including
+  image upload), sale pricing (old price / new price / % off), order list
+  with delivery addresses, and marking Cash on Delivery orders as delivered
+- Order confirmation emails (optional, via any SMTP provider)
+- SQLite database (`data/ego.db`) — products, orders, accounts
 
 ## Project structure
 
 ```
-public/            static frontend (served as-is, no build step)
-  index.html       home page
-  shop.html        product catalog + filters
-  product.html     product detail page
-  cart.html        cart + "Checkout" button
-  success.html     shown after a successful payment
-  cancel.html      shown if checkout is cancelled
-  about.html       brand story
-  contact.html     contact form (client-side only for now)
-  css/style.css    all styling
-  js/products.js   product catalog data (shared with the server)
-  js/*.js          cart, rendering, and checkout logic
-server.js          Express server: serves public/, creates Stripe Checkout
-                   sessions, verifies Stripe webhooks
+public/                 static frontend (served as-is, no build step)
+  index.html, shop.html, sale.html, product.html, cart.html,
+  about.html, contact.html, account.html                customer-facing pages
+  verify-email.html, reset-password.html                 account flows
+  success.html, cancel.html                               post-checkout
+  admin/                                                   admin panel (login, products, orders, sale)
+  css/style.css          all styling
+  js/*.js                cart, rendering, checkout, account, admin logic
+db/index.js              SQLite connection + schema (auto-migrates on boot)
+lib/auth.js              password hashing, JWT sessions, auth middleware
+lib/email.js             order confirmation / verification / reset emails
+routes/auth.js           signup, login, logout, verify email, password reset
+routes/products.js       product catalog API + admin CRUD (with image upload)
+routes/orders.js         checkout (card + COD), order lookup, admin order actions
+scripts/seed-products.js one-time seed of the starter catalog
+scripts/make-admin.js    create/promote an admin user from the command line
+server.js                wires everything together; Stripe webhook; security
+                         middleware (helmet, rate limiting)
 ```
 
-Product prices are only ever read from `public/js/products.js` on the
-**server**. The browser cannot influence how much a customer is actually
-charged.
+Prices are only ever read from the database on the **server** — the browser
+cannot influence how much a customer is actually charged. Cart item
+validation (product exists, quantity in range, valid size) happens
+server-side for both the card and Cash on Delivery checkout paths. The same
+applies to shipping: the fixed fee is added to the order total entirely
+server-side (`SHIPPING_FEE_CENTS` in `routes/orders.js`) — nothing sent by
+the client affects it.
 
 ## 1. Install dependencies
 
@@ -41,73 +60,158 @@ charged.
 npm install
 ```
 
-## 2. Get your Stripe API keys
+Requires **Node 22.5+** (uses Node's built-in `node:sqlite` — no native
+module compilation needed).
 
-You'll need your own Stripe account to accept real payments:
-
-1. Sign up / log in at https://dashboard.stripe.com
-2. Go to **Developers → API keys** and copy your **test mode** keys to start
-   (switch to live keys only once you're ready to accept real money)
-3. Copy `.env.example` to `.env` and fill in:
+## 2. Set up your environment
 
 ```bash
 cp .env.example .env
 ```
 
+Fill in:
+
+- `JWT_SECRET` — required for login (admin and customers) to work at all.
+  Generate one with:
+  `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+- `CLIENT_URL` — your site's URL (`http://localhost:3000` locally)
+- `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` — only if you want card
+  payments (see **Payments** below — read the caveat first)
+- `SMTP_*` / `EMAIL_FROM` — optional, for order confirmation / verification /
+  password reset emails. Works with any SMTP provider (Resend, Gmail app
+  password, SendGrid, Mailgun, etc). Leave `SMTP_HOST` blank to skip sending
+  emails entirely — everything else still works, emails are just silently
+  skipped.
+
+## 3. Seed the database and create an admin account
+
+```bash
+node scripts/seed-products.js
+node scripts/make-admin.js you@example.com yourpassword
 ```
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_PUBLISHABLE_KEY=pk_test_...
-CLIENT_URL=http://localhost:3000
-```
 
-The publishable key isn't currently used by the frontend (Stripe Checkout is
-hosted, so it isn't needed client-side yet), but it's there for when you add
-Stripe Elements or Payment Links.
+`seed-products.js` is safe to re-run (it won't duplicate existing products).
+`make-admin.js` creates the account if it doesn't exist, or promotes/resets
+the password of an existing one.
 
-### Webhook secret (optional but recommended)
-
-To reliably know when an order is paid (e.g. to save it to a database or
-send a confirmation email), set up a webhook:
-
-1. Install the [Stripe CLI](https://stripe.com/docs/stripe-cli) locally, or add
-   an endpoint at **Developers → Webhooks** in the dashboard pointing to
-   `https://your-domain.com/webhook`
-2. For local testing: `stripe listen --forward-to localhost:3000/webhook`
-3. Copy the printed `whsec_...` value into `STRIPE_WEBHOOK_SECRET` in `.env`
-
-Without this, checkout still works — you just won't get server-side
-notification when an order completes (the `success.html` page still shows
-the customer their confirmation).
-
-## 3. Run it
+## 4. Run it
 
 ```bash
 npm start
 ```
 
-Visit http://localhost:3000
+Visit http://localhost:3000, and log into the admin panel at
+http://localhost:3000/admin/login.html with the account you just created.
 
-Use [Stripe's test card numbers](https://stripe.com/docs/testing) to test a
-purchase, e.g. `4242 4242 4242 4242`, any future expiry, any CVC.
+## Shipping
 
-## 4. Customize
+Every order — card or Cash on Delivery — is charged a **fixed EGP 75.00
+shipping fee**, once per order regardless of item count or quantity. It is
+not stored per-order in the database; it's a single backend constant,
+`SHIPPING_FEE_CENTS = 7500` (piastres, same convention as `price_cents`) in
+`routes/orders.js`, added to the server-computed products subtotal for both
+checkout paths (`/api/create-checkout-session` and `/api/orders/cod`) before
+the order is written to the database. To change the fee, edit that one
+constant — nothing else needs to change, and it's applied consistently to
+whichever payment method is active. An empty cart is rejected before this
+fee is ever applied, so it's impossible to be charged shipping alone.
 
-- **Products**: edit the `PRODUCTS` array in `public/js/products.js` (id,
-  name, category, price in cents, image, description, sizes)
-- **Product images**: replace the placeholder SVGs in `public/images/` with
-  real product photography (same filenames, or update the `image` field per
-  product)
+Every page that shows an order total (cart, order confirmation, account
+order history, confirmation emails) breaks it down as Subtotal + Shipping =
+Total. The cart page's shipping line is a display-only mirror of the same
+constant; every other total shown comes directly from the server's own
+calculation, never recomputed or trusted from the browser.
+
+## Payments
+
+**Cash on Delivery is the only active payment method right now**, by
+deliberate choice — no setup needed, it works out of the box.
+
+**Stripe is implemented in the code but intentionally disabled** (no
+`STRIPE_SECRET_KEY` configured). It's not just a matter of preference either:
+Stripe does not support merchant accounts registered in Egypt, so it
+wouldn't work for a real Egypt-based business even if enabled. The
+integration is kept in the codebase — including the same fixed shipping fee
+applied as its own Stripe line item — in case you register a business
+somewhere Stripe does support, or as a reference implementation.
+
+**A local Egyptian payment gateway (Paymob) is planned for a later phase**
+and is not implemented yet — see **Known limitations** below.
+
+If you ever do enable Stripe with a working account:
+1. Get your API keys from https://dashboard.stripe.com (test mode keys to start)
+2. Set `STRIPE_SECRET_KEY` and `CLIENT_URL` in `.env`
+3. For webhook-confirmed orders (recommended): create a webhook endpoint in
+   the Stripe dashboard pointing at `https://your-domain.com/webhook`, or run
+   `stripe listen --forward-to localhost:3000/webhook` locally, and set
+   `STRIPE_WEBHOOK_SECRET` to the printed `whsec_...` value
+4. Test with [Stripe's test cards](https://stripe.com/docs/testing), e.g.
+   `4242 4242 4242 4242`, any future expiry, any CVC
+
+## Customize
+
+- **Products, prices, sale pricing, images**: manage all of this from the
+  admin panel (`/admin/products.html`, `/admin/sale.html`) — no code changes
+  needed day-to-day
 - **Branding**: colors and fonts live in `public/css/style.css` under the
   `:root` CSS variables at the top
-- **Shipping countries**: edit `shipping_address_collection.allowed_countries`
-  in `server.js`
+- **Delivery country**: currently Egypt-only (`ALLOWED_COUNTRIES` in
+  `routes/orders.js`, plus the country `<select>` in `public/js/cart-page.js`)
+- **Shipping fee**: fixed at EGP 75.00 per order (`SHIPPING_FEE_CENTS` in
+  `routes/orders.js` — see **Shipping** above)
 
 ## Deploying
 
-This is a standard Node app — it can be deployed to any host that runs
-Node.js (Render, Railway, Fly.io, a VPS, etc.). Whichever host you use:
+This is a standard Node app — it runs on any host that runs Node 22.5+
+(Render, Railway, Fly.io, a VPS, etc). Before you deploy, read this:
 
-1. Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `CLIENT_URL`
-   (your real production URL) as environment variables on the host
-2. Point your Stripe webhook endpoint at `https://your-real-domain.com/webhook`
-3. Switch to live Stripe keys once you're ready to accept real payments
+**The database is a SQLite file (`data/ego.db` by default) on local disk,
+and uploaded product images are plain files (`public/images/products/` by
+default) on local disk too.** Neither survives a host with an ephemeral
+filesystem (e.g. most free-tier container platforms reset the filesystem on
+every redeploy or restart) — you would lose all products, orders, accounts,
+and uploaded images on the next deploy. `DATA_DIR` and `UPLOADS_DIR` (see
+`.env.example`) exist specifically so you can point both at a persistent
+disk instead.
+
+### Render (paid Web Service + Persistent Disk)
+
+1. Create the Web Service from this repo. Build command: `npm install`.
+   Start command: `npm start`.
+2. Add a **Persistent Disk** to the service (Render dashboard → your service
+   → Disks), e.g. mounted at `/var/data`. A few GB is plenty to start.
+3. Set these environment variables on the service:
+   - `DATA_DIR=/var/data`
+   - `UPLOADS_DIR=/var/data/uploads/products`
+   - `NODE_ENV=production` — makes the login cookie `Secure` (HTTPS-only)
+   - `JWT_SECRET` (generate a fresh one — don't reuse a local dev value),
+     `CLIENT_URL` (your real `https://...` Render URL or custom domain),
+     and the `SMTP_*` / `STRIPE_*` vars you want to use (see `.env.example`)
+4. Deploy. Both directories are created automatically on first boot if they
+   don't already exist on the disk (see `db/index.js` and
+   `routes/products.js`) — no manual `mkdir` step needed.
+5. Run `node scripts/seed-products.js` and `node scripts/make-admin.js
+   you@example.com yourpassword` once against the deployed service (e.g. via
+   Render's shell) to seed the catalog and create your first admin login.
+6. If using Stripe: point its webhook at `https://your-real-domain.com/webhook`
+   and switch to live keys only once ready to accept real payments.
+7. Update the **placeholder EGP prices** in the admin panel — the starter
+   catalog's prices were carried over from an earlier USD version and are
+   currently far too low for EGP (e.g. a puffer jacket at EGP 158.00).
+
+Without `DATA_DIR`/`UPLOADS_DIR` set, the app falls back to its original
+local paths (`data/ego.db`, `public/images/products/`) — fine for local
+development, but on Render specifically that means the ephemeral (non-disk)
+filesystem, so set both for any real Render deployment.
+
+## Known limitations
+
+- **No local Egyptian payment gateway yet.** Cash on Delivery works;
+  card payments need either a non-Egypt Stripe account or a swap to
+  Paymob/Kashier (not built).
+- **Admin roles are all-or-nothing** — any account with `is_admin` has full
+  access to products, orders, and pricing. No per-permission roles.
+- **No automated tests.** Changes should be smoke-tested manually (or with a
+  quick Playwright script) before deploying.
+- Product images are plain files under `public/images/` (including
+  admin-uploaded ones under `public/images/products/`) — no CDN/resizing.

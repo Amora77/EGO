@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orders — EGO Admin</title>
+<link rel="icon" href="../images/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="logo" href="../index.html">EGO</a>
+    <nav class="main-nav">
+      <a href="products.html">Products</a>
+      <a href="orders.html" class="active">Orders</a>
+      <a href="sale.html">Sale</a>
+    </nav>
+    <div class="header-actions">
+      <button class="btn btn-outline" id="logout-btn">Log Out</button>
+    </div>
+  </div>
+</header>
+
+<section class="container" style="padding-top:48px;">
+  <div class="section-heading" style="flex-direction:column; align-items:flex-start; gap:8px;">
+    <h2>Orders</h2>
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="admin-table" id="orders-table">
+      <thead>
+        <tr>
+          <th>Order #</th>
+          <th>Date</th>
+          <th>Status</th>
+          <th>Payment</th>
+          <th>Email</th>
+          <th>Total</th>
+          <th>Items</th>
+          <th>Delivery Address</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="orders-tbody"></tbody>
+    </table>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-bottom">
+      <span>&copy; 2026 EGO. All rights reserved.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="../js/admin.js"></script>
+</body>
+</html>

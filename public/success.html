@@ -15,10 +15,12 @@
     <nav class="main-nav">
       <a href="index.html">Home</a>
       <a href="shop.html">Shop</a>
+      <a href="sale.html">Sale</a>
       <a href="about.html">About</a>
       <a href="contact.html">Contact</a>
     </nav>
     <div class="header-actions">
+      <a class="cart-link" href="account.html">Account</a>
       <a class="cart-link" href="cart.html">Cart<span class="cart-count">0</span></a>
       <button class="nav-toggle" aria-label="Toggle menu">&#9776;</button>
     </div>
@@ -27,7 +29,8 @@
 
 <section class="container status-page">
   <h1>Thank you — your order is confirmed</h1>
-  <p>A confirmation email is on its way from Stripe. We're getting your EGO pieces ready to ship.</p>
+  <p id="intro-text">A confirmation email is on its way from Stripe. We're getting your EGO pieces ready to ship.</p>
+  <div id="order-summary" style="max-width:420px;margin:0 auto 32px;"></div>
   <a class="btn" href="shop.html">Continue Shopping</a>
 </section>
 
@@ -41,9 +44,100 @@
 </footer>
 
 <script src="js/cart.js"></script>
+<script src="js/products.js"></script>
 <script>
   localStorage.removeItem(CART_KEY);
-  document.addEventListener("DOMContentLoaded", updateCartBadge);
+
+  // Escapes a value for safe insertion into HTML via innerHTML. Must be
+  // applied to every customer-controlled string (shipping name/phone/
+  // address, item names) before it's interpolated into a template — this
+  // page renders data from the order the visitor just placed, and that
+  // data was supplied by an anonymous checkout request.
+  function escapeHtml(value) {
+    return String(value ?? "").replace(
+      /[&<>"']/g,
+      (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]
+    );
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    updateCartBadge();
+
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session_id");
+    const orderToken = params.get("order");
+    const summary = document.getElementById("order-summary");
+    const intro = document.getElementById("intro-text");
+    if (!summary) return;
+
+    function renderOrder(order) {
+      const addr = order.shippingAddress;
+      summary.innerHTML = `
+        <div class="summary-box">
+          <div class="summary-row"><span>Order Number</span><span>${order.orderNumber}</span></div>
+          ${order.items
+            .map(
+              (i) => `
+            <div class="summary-row">
+              <span>${i.qty} &times; ${escapeHtml(i.productName)}</span>
+              <span>${formatPrice(i.unitAmount * i.qty)}</span>
+            </div>
+          `
+            )
+            .join("")}
+          <div class="summary-row"><span>Subtotal</span><span>${formatPrice(order.subtotal)}</span></div>
+          <div class="summary-row"><span>Shipping</span><span>${formatPrice(order.shippingFee)}</span></div>
+          <div class="summary-row total"><span>Total</span><span>${formatPrice(order.amountTotal)}</span></div>
+        </div>
+        ${
+          addr
+            ? `
+        <div class="summary-box" style="margin-top:16px;">
+          <h2>Delivery Address</h2>
+          <p style="font-size:14px; color:#6b6b6b; margin:0;">
+            ${escapeHtml(addr.name)}<br>
+            ${addr.phone ? escapeHtml(addr.phone) + "<br>" : ""}
+            ${escapeHtml(addr.address.line1)}${addr.address.line2 ? ", " + escapeHtml(addr.address.line2) : ""}<br>
+            ${escapeHtml(addr.address.city)}${addr.address.state ? ", " + escapeHtml(addr.address.state) : ""} ${escapeHtml(addr.address.postal_code)}<br>
+            ${escapeHtml(addr.address.country)}
+          </p>
+        </div>`
+            : ""
+        }
+      `;
+
+      if (order.paymentMethod === "cod" && intro) {
+        intro.textContent = "Pay in cash when your order is delivered. We're getting your EGO pieces ready to ship.";
+      }
+    }
+
+    if (orderToken) {
+      fetch(`/api/orders/cod/${encodeURIComponent(orderToken)}`)
+        .then((res) => (res.ok ? res.json() : Promise.reject()))
+        .then(renderOrder)
+        .catch(() => {});
+      return;
+    }
+
+    if (!sessionId) return;
+
+    async function tryLoadOrder(attempt) {
+      try {
+        const res = await fetch(`/api/orders/session/${encodeURIComponent(sessionId)}`);
+        if (res.ok) {
+          renderOrder(await res.json());
+          return;
+        }
+      } catch {
+        // fall through to retry/give up below
+      }
+      if (attempt < 3) {
+        setTimeout(() => tryLoadOrder(attempt + 1), 1500);
+      }
+    }
+
+    tryLoadOrder(0);
+  });
 </script>
 <script src="js/main.js"></script>
 </body>

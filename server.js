@@ -2,16 +2,32 @@ require("dotenv").config();
 
 const path = require("path");
 const express = require("express");
-const { PRODUCTS } = require("./public/js/products.js");
+const cookieParser = require("cookie-parser");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+
+const db = require("./db");
+const { attachUser } = require("./lib/auth");
+const { sendOrderConfirmation } = require("./lib/email");
+const createAuthRouter = require("./routes/auth");
+const productsRouter = require("./routes/products");
+const createOrdersRouter = require("./routes/orders");
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecretKey ? require("stripe")(stripeSecretKey) : null;
 
 const PORT = process.env.PORT || 3000;
 const CLIENT_URL = process.env.CLIENT_URL || `http://localhost:${PORT}`;
-const MAX_QTY_PER_ITEM = 20;
 
 const app = express();
+
+// Deploying behind a reverse proxy (Render, Railway, Fly, or nginx on a VPS —
+// i.e. almost any real deployment) means every request arrives from the
+// proxy's own IP unless Express is told to read the real client IP from
+// X-Forwarded-For. Without this, the rate limiters below would see every
+// visitor as one single IP and lock out the whole site after a handful of
+// requests total.
+app.set("trust proxy", 1);
 
 // Stripe webhook needs the raw request body for signature verification,
 // so it must be registered before the global express.json() parser.
@@ -40,78 +56,98 @@ app.post(
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
+      const orderId = session.metadata && session.metadata.order_id;
+
+      if (orderId) {
+        const shipping = session.shipping_details || session.customer_details || null;
+        const email = (session.customer_details && session.customer_details.email) || null;
+
+        db.prepare(
+          `UPDATE orders
+           SET status = 'paid', stripe_session_id = ?, email = ?, amount_total = ?, shipping_address = ?
+           WHERE id = ?`
+        ).run(session.id, email, session.amount_total, shipping ? JSON.stringify(shipping) : null, orderId);
+
+        const items = db.prepare("SELECT * FROM order_items WHERE order_id = ?").all(orderId);
+        // Fire-and-forget: a failed/slow send must not delay the webhook response to Stripe.
+        sendOrderConfirmation({
+          email,
+          amountTotal: session.amount_total,
+          items: items.map((i) => ({
+            productName: i.product_name,
+            qty: i.qty,
+            unitAmount: i.unit_amount
+          }))
+        });
+      } else {
+        console.warn(`Webhook for session ${session.id} had no order_id in metadata.`);
+      }
+
       console.log(`Order completed: session ${session.id}, amount ${session.amount_total}`);
-      // TODO: persist the order, send confirmation email, etc.
     }
 
     res.json({ received: true });
   }
 );
 
+// CSP is off: the site relies on inline <script>/<style> throughout and a
+// nonce-based rewrite is a bigger job than fits here. Every other helmet
+// protection (HSTS, X-Frame-Options, X-Content-Type-Options, etc.) still
+// applies and costs nothing to keep on.
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
+app.use(cookieParser());
+app.use(attachUser);
 app.use(express.static(path.join(__dirname, "public")));
+// Serves uploaded product images from wherever UPLOAD_DIR actually resolved
+// to (see routes/products.js) at the same URL path the frontend already
+// expects. A no-op duplicate of the line above when UPLOADS_DIR isn't set,
+// since UPLOAD_DIR is then still inside public/ — only matters once it
+// points somewhere else (e.g. a persistent disk mount).
+app.use("/images/products", express.static(productsRouter.UPLOAD_DIR));
 
-app.post("/create-checkout-session", async (req, res) => {
-  if (!stripe) {
-    return res.status(500).json({
-      error: "Payments are not configured yet. Set STRIPE_SECRET_KEY on the server."
-    });
-  }
+// Brute-force / abuse protection on the endpoints worth protecting: auth
+// (login, signup, password reset) and order creation.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many attempts. Please try again later." }
+});
+const checkoutLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please try again later." }
+});
 
-  const { items } = req.body;
+app.use("/api/auth", authLimiter, createAuthRouter({ clientUrl: CLIENT_URL }));
+app.use("/api", productsRouter);
+app.use("/api", createOrdersRouter({ stripe, clientUrl: CLIENT_URL, checkoutLimiter }));
 
-  if (!Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: "Your cart is empty." });
-  }
-
-  const line_items = [];
-
-  for (const item of items) {
-    const product = PRODUCTS.find((p) => p.id === item.productId);
-    if (!product) {
-      return res.status(400).json({ error: `Unknown product: ${item.productId}` });
-    }
-
-    const qty = Number.parseInt(item.qty, 10);
-    if (!Number.isInteger(qty) || qty < 1 || qty > MAX_QTY_PER_ITEM) {
-      return res.status(400).json({ error: `Invalid quantity for ${product.name}.` });
-    }
-
-    if (item.size && !product.sizes.includes(item.size)) {
-      return res.status(400).json({ error: `Invalid size for ${product.name}.` });
-    }
-
-    line_items.push({
-      price_data: {
-        currency: "usd",
-        product_data: {
-          name: item.size ? `${product.name} (${item.size})` : product.name
-        },
-        unit_amount: product.price
-      },
-      quantity: qty
-    });
-  }
-
-  try {
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      line_items,
-      shipping_address_collection: { allowed_countries: ["US", "CA", "GB", "AU"] },
-      success_url: `${CLIENT_URL}/success.html?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${CLIENT_URL}/cancel.html`
-    });
-
-    res.json({ url: session.url });
-  } catch (err) {
-    console.error("Stripe checkout session error:", err.message);
-    res.status(500).json({ error: "Unable to start checkout. Please try again." });
-  }
+// Catch-all error handler: never leak stack traces or file paths to the
+// client (the default Express handler does exactly that), regardless of
+// NODE_ENV. The real error still goes to the server log.
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  console.error("Unhandled request error:", err);
+  const isBadJson = err.type === "entity.parse.failed" || err instanceof SyntaxError;
+  res.status(isBadJson ? 400 : 500).json({
+    error: isBadJson ? "Invalid request body." : "Something went wrong. Please try again."
+  });
 });
 
 app.listen(PORT, () => {
   console.log(`EGO store running at http://localhost:${PORT}`);
   if (!stripe) {
     console.warn("STRIPE_SECRET_KEY is not set — checkout will be disabled until configured.");
+  }
+  if (!process.env.JWT_SECRET) {
+    console.warn("JWT_SECRET is not set — admin login will be disabled until configured.");
+  }
+  if (!process.env.SMTP_HOST) {
+    console.warn("SMTP_HOST is not set — order confirmation emails will be skipped until configured.");
   }
 });

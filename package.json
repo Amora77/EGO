@@ -8,9 +8,22 @@
     "start": "node server.js",
     "dev": "node server.js"
   },
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.2.0",
+    "nodemailer": "^9.0.3",
     "stripe": "^16.8.0"
+  },
+  "overrides": {
+    "qs": "^6.16.0"
   }
 }

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sale — EGO Admin</title>
+<link rel="icon" href="../images/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="logo" href="../index.html">EGO</a>
+    <nav class="main-nav">
+      <a href="products.html">Products</a>
+      <a href="orders.html">Orders</a>
+      <a href="sale.html" class="active">Sale</a>
+    </nav>
+    <div class="header-actions">
+      <button class="btn btn-outline" id="logout-btn">Log Out</button>
+    </div>
+  </div>
+</header>
+
+<section class="container" style="padding-top:48px;">
+  <div class="section-heading" style="flex-direction:column; align-items:flex-start; gap:8px;">
+    <h2>Sale</h2>
+    <p style="font-size:14px; color:#6b6b6b; margin:0;">
+      Set a Compare-at Price higher than the Price to put a product on sale. Customers will see the
+      Price with the Compare-at Price crossed out and a discount badge. Clear the Compare-at Price
+      (leave it blank) and save to end a sale.
+    </p>
+  </div>
+
+  <label style="display:flex; align-items:center; gap:8px; font-size:14px; margin-bottom:12px;">
+    <input type="checkbox" id="on-sale-only"> Show only products currently on sale
+  </label>
+  <p id="sale-msg" style="font-size:14px; color:#c8102e; margin:0 0 16px;"></p>
+
+  <div style="overflow-x:auto;">
+    <table class="admin-table" id="sale-table">
+      <thead>
+        <tr>
+          <th>Image</th>
+          <th>Name</th>
+          <th>Price (EGP)</th>
+          <th>Compare-at Price (EGP)</th>
+          <th>Discount</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="sale-tbody"></tbody>
+    </table>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-bottom">
+      <span>&copy; 2026 EGO. All rights reserved.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="../js/admin.js"></script>
+</body>
+</html>

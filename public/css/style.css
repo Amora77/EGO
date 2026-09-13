@@ -250,6 +250,7 @@ section {
 }
 
 .product-card figure {
+  position: relative;
   margin: 0;
   aspect-ratio: 4 / 5;
   overflow: hidden;
@@ -290,6 +291,29 @@ section {
   color: var(--gray);
 }
 
+.badge-sale {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: var(--accent);
+  color: var(--white);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+}
+
+.price-old {
+  text-decoration: line-through;
+  color: var(--gray);
+  margin-right: 8px;
+}
+
+.price-sale {
+  color: var(--accent);
+  font-weight: 700;
+}
+
 /* Filters */
 .filter-bar {
   display: flex;
@@ -322,6 +346,7 @@ section {
 }
 
 .product-detail .gallery {
+  position: relative;
   background: var(--off-white);
   aspect-ratio: 4 / 5;
   overflow: hidden;
@@ -537,7 +562,7 @@ section {
   align-items: start;
 }
 
-form.contact-form label {
+.contact-form label {
   display: block;
   font-size: 12px;
   letter-spacing: 1.5px;
@@ -546,19 +571,49 @@ form.contact-form label {
   margin-bottom: 8px;
 }
 
-form.contact-form input,
-form.contact-form textarea {
+.contact-form input,
+.contact-form select,
+.contact-form textarea {
   width: 100%;
   padding: 12px 14px;
   border: 1px solid var(--light-gray);
   font-family: inherit;
   font-size: 14px;
   margin-bottom: 20px;
+  background: var(--white);
 }
 
-form.contact-form textarea {
+.contact-form textarea {
   min-height: 140px;
   resize: vertical;
+}
+
+/* Admin */
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.admin-table th,
+.admin-table td {
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--light-gray);
+  vertical-align: middle;
+}
+
+.admin-table th {
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--gray);
+}
+
+.admin-row-btn {
+  padding: 8px 14px;
+  font-size: 11px;
+  margin-right: 8px;
 }
 
 /* Footer */

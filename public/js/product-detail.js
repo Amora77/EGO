@@ -1,6 +1,8 @@
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const root = document.getElementById("product-detail");
   if (!root) return;
+
+  await loadProducts();
 
   const params = new URLSearchParams(window.location.search);
   const product = getProductById(params.get("id"));
@@ -21,12 +23,20 @@ document.addEventListener("DOMContentLoaded", () => {
   let selectedSize = product.sizes[0];
   let qty = 1;
 
+  const onSale = product.discountPercent != null;
+
   root.innerHTML = `
-    <div class="gallery"><img src="${product.image}" alt="${product.name}"></div>
+    <div class="gallery">
+      <img src="${product.image}" alt="${product.name}">
+      ${onSale ? `<span class="badge-sale">-${product.discountPercent}%</span>` : ""}
+    </div>
     <div class="details">
       <div class="category">${product.category}</div>
       <h1>${product.name}</h1>
-      <div class="price">${formatPrice(product.price)}</div>
+      <div class="price">
+        ${onSale ? `<span class="price-old">${formatPrice(product.compareAtPrice)}</span>` : ""}
+        <span class="${onSale ? "price-sale" : ""}">${formatPrice(product.price)}</span>
+      </div>
       <p class="description">${product.description}</p>
 
       <div class="size-picker">

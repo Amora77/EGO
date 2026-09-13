@@ -2,3 +2,12 @@ node_modules/
 .env
 *.log
 .DS_Store
+data/
+*.db
+*.db-wal
+*.db-shm
+public/images/products/
+uploads/
+.claude/settings.local.json
+Thumbs.db
+desktop.ini

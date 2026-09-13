@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manage Products — EGO Admin</title>
+<link rel="icon" href="../images/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="logo" href="../index.html">EGO</a>
+    <nav class="main-nav">
+      <a href="products.html" class="active">Products</a>
+      <a href="orders.html">Orders</a>
+      <a href="sale.html">Sale</a>
+    </nav>
+    <div class="header-actions">
+      <button class="btn btn-outline" id="logout-btn">Log Out</button>
+    </div>
+  </div>
+</header>
+
+<section class="container" style="padding-top:48px;">
+  <div class="section-heading" style="flex-direction:column; align-items:flex-start; gap:8px;">
+    <h2 id="form-heading">Add Product</h2>
+  </div>
+
+  <form class="contact-form" id="product-form" style="max-width:520px; margin-bottom:56px;">
+    <input type="hidden" id="product-id" value="">
+
+    <label for="name">Name</label>
+    <input type="text" id="name" name="name" required>
+
+    <label for="category">Category</label>
+    <input type="text" id="category" name="category" required>
+
+    <label for="price">Price (EGP)</label>
+    <input type="number" id="price" name="price" min="0.01" step="0.01" required>
+
+    <label for="compare-at-price">Compare-at Price (EGP, optional &mdash; shows as the old/crossed-out price when on sale)</label>
+    <input type="number" id="compare-at-price" name="compareAtPrice" min="0.01" step="0.01">
+
+    <label for="sizes">Sizes (comma-separated)</label>
+    <input type="text" id="sizes" name="sizes" placeholder="S, M, L, XL">
+
+    <label for="description">Description</label>
+    <textarea id="description" name="description"></textarea>
+
+    <label for="image">Image</label>
+    <input type="file" id="image" name="image" accept="image/*">
+
+    <div style="display:flex; gap:12px; margin-top:8px;">
+      <button class="btn" type="submit" id="product-submit-btn">Add Product</button>
+      <button class="btn btn-outline" type="button" id="product-cancel-btn" style="display:none;">Cancel Edit</button>
+    </div>
+    <p id="product-form-msg" style="margin-top:16px; font-size:14px;"></p>
+  </form>
+
+  <div class="section-heading" style="flex-direction:column; align-items:flex-start; gap:8px;">
+    <h2>Catalog</h2>
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="admin-table" id="products-table">
+      <thead>
+        <tr>
+          <th>Image</th>
+          <th>Name</th>
+          <th>Category</th>
+          <th>Price</th>
+          <th>Sale</th>
+          <th>Sizes</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="products-tbody"></tbody>
+    </table>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-bottom">
+      <span>&copy; 2026 EGO. All rights reserved.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="../js/admin.js"></script>
+</body>
+</html>
