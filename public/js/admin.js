@@ -86,6 +86,9 @@ function initProductsPage() {
   const stockFieldsContainer = document.getElementById("stock-fields");
   const descriptionField = document.getElementById("description");
   const imageField = document.getElementById("image");
+  const coverPreviewContainer = document.getElementById("cover-image-preview");
+  const galleryImagesField = document.getElementById("gallery-images");
+  const galleryListContainer = document.getElementById("gallery-images-list");
   const heading = document.getElementById("form-heading");
   const submitBtn = document.getElementById("product-submit-btn");
   const cancelBtn = document.getElementById("product-cancel-btn");
@@ -124,10 +127,65 @@ function initProductsPage() {
     renderStockInputs(parseSizesInput(sizesField.value));
   });
 
+  function renderCoverPreview(imagePath) {
+    coverPreviewContainer.innerHTML = imagePath
+      ? `<img src="../${imagePath}" alt="" style="width:64px;height:64px;object-fit:cover;">`
+      : "";
+  }
+
+  // Existing gallery images for the product currently being edited — only
+  // populated once a product has an id (a brand-new, unsaved product has no
+  // gallery yet). Remove/Set Cover act immediately against the server
+  // rather than waiting for the main form to be submitted, so the admin
+  // sees the result right away and never loses track of pending changes.
+  function renderGalleryList(productId, images) {
+    galleryListContainer.innerHTML = (images || [])
+      .map(
+        (img) => `
+        <div class="gallery-admin-thumb" data-image-id="${img.id}" style="text-align:center;">
+          <img src="../${img.image}" alt="" style="width:64px;height:64px;object-fit:cover;display:block;">
+          <div style="display:flex; gap:4px; margin-top:4px;">
+            <button type="button" class="btn btn-outline admin-row-btn" data-action="set-primary" style="padding:4px 8px; font-size:10px; margin:0;">Set Cover</button>
+            <button type="button" class="btn btn-outline admin-row-btn" data-action="remove-image" style="padding:4px 8px; font-size:10px; margin:0;">Remove</button>
+          </div>
+        </div>
+      `
+      )
+      .join("");
+  }
+
+  galleryListContainer.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-action]");
+    if (!btn) return;
+    const wrap = btn.closest("[data-image-id]");
+    const imageId = wrap.dataset.imageId;
+    const productId = idField.value;
+    if (!productId) return;
+
+    if (btn.dataset.action === "remove-image") {
+      if (!confirm("Remove this gallery image?")) return;
+      await fetch(`/api/admin/products/${encodeURIComponent(productId)}/images/${encodeURIComponent(imageId)}`, {
+        method: "DELETE"
+      });
+    } else if (btn.dataset.action === "set-primary") {
+      await fetch(
+        `/api/admin/products/${encodeURIComponent(productId)}/images/${encodeURIComponent(imageId)}/primary`,
+        { method: "POST" }
+      );
+    }
+
+    const res = await fetch(`/api/products/${encodeURIComponent(productId)}`);
+    const product = await res.json();
+    renderCoverPreview(product.image);
+    renderGalleryList(product.id, product.images);
+  });
+
   function resetForm() {
     form.reset();
     idField.value = "";
     stockFieldsContainer.innerHTML = "";
+    coverPreviewContainer.innerHTML = "";
+    galleryListContainer.innerHTML = "";
     heading.textContent = "Add Product";
     submitBtn.textContent = "Add Product";
     cancelBtn.style.display = "none";
@@ -185,6 +243,8 @@ function initProductsPage() {
       sizesField.value = product.sizes.join(", ");
       renderStockInputs(product.sizes, product.stock || {});
       descriptionField.value = product.description || "";
+      renderCoverPreview(product.image);
+      renderGalleryList(product.id, product.images);
       heading.textContent = `Edit: ${product.name}`;
       submitBtn.textContent = "Save Changes";
       cancelBtn.style.display = "inline-block";
@@ -215,6 +275,10 @@ function initProductsPage() {
     if (imageField.files[0]) {
       formData.set("image", imageField.files[0]);
     }
+    // Multiple files under the same field name — appended to the existing
+    // gallery (never replaces it); removing individual images happens
+    // immediately via their own Remove button, not through this submit.
+    Array.from(galleryImagesField.files).forEach((file) => formData.append("images", file));
 
     const url = id ? `/api/admin/products/${encodeURIComponent(id)}` : "/api/admin/products";
     const method = id ? "PUT" : "POST";

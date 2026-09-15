@@ -303,6 +303,20 @@ section {
   padding: 4px 8px;
 }
 
+/* Right side so it can coexist with .badge-sale (left) on the same card. */
+.badge-sold-out {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: var(--black);
+  color: var(--white);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 4px 8px;
+}
+
 .price-old {
   text-decoration: line-through;
   color: var(--gray);
@@ -346,16 +360,104 @@ section {
 }
 
 .product-detail .gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.product-detail .gallery-main {
   position: relative;
   background: var(--off-white);
   aspect-ratio: 4 / 5;
   overflow: hidden;
+  cursor: zoom-in;
 }
 
-.product-detail .gallery img {
+.product-detail .gallery-main img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.product-detail .gallery-thumbs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.product-detail .gallery-thumb {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 80px;
+  padding: 0;
+  border: 2px solid transparent;
+  background: var(--off-white);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.product-detail .gallery-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.product-detail .gallery-thumb.active {
+  border-color: var(--black);
+}
+
+/* Lightbox: minimal full-screen image viewer, no external dependency.
+   Hidden by default via display:none, toggled directly in JS rather than
+   the "hidden" attribute — this element sets its own "display" for the
+   open state, so relying on [hidden] here would just be overridden by that. */
+.lightbox-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 17, 17, 0.92);
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.lightbox-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  background: none;
+  border: none;
+  color: var(--white);
+  font-size: 32px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--white);
+  font-size: 48px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 16px;
+}
+
+.lightbox-prev {
+  left: 8px;
+}
+
+.lightbox-next {
+  right: 8px;
 }
 
 .product-detail .details .category {

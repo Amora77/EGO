@@ -37,6 +37,14 @@ const upload = multer({
     cb(null, true);
   }
 });
+// Same multer instance/limits as the single-cover upload above (same
+// ALLOWED_MIME + 5MB-per-file enforcement) — "image" is the existing
+// primary/cover field, unchanged; "images" is the new gallery batch, capped
+// at 8 files per create/edit submission as a reasonable per-request limit.
+const uploadWithGallery = upload.fields([
+  { name: "image", maxCount: 1 },
+  { name: "images", maxCount: 8 }
+]);
 
 function slugify(name) {
   return name
@@ -102,6 +110,38 @@ function syncProductStock(productId, sizesList, stockInput) {
   }
 }
 
+// Gallery images: additional photos beyond the primary/cover `products.image`.
+// Always read/written ordered by sort_order (then id as a stable tiebreaker
+// for images uploaded in the same batch) so "return images in sort_order" is
+// simply what the query already does — nothing extra needed at the call sites.
+const imagesStmt = db.prepare(
+  "SELECT id, image, sort_order FROM product_images WHERE product_id = ? ORDER BY sort_order ASC, id ASC"
+);
+const maxSortOrderStmt = db.prepare(
+  "SELECT COALESCE(MAX(sort_order), -1) AS maxOrder FROM product_images WHERE product_id = ?"
+);
+const insertImageStmt = db.prepare("INSERT INTO product_images (product_id, image, sort_order) VALUES (?, ?, ?)");
+const deleteImageStmt = db.prepare("DELETE FROM product_images WHERE id = ? AND product_id = ?");
+// Scoped by product_id (not just the image's own id) so a request can never
+// touch a gallery row belonging to a different product.
+const getImageStmt = db.prepare("SELECT * FROM product_images WHERE id = ? AND product_id = ?");
+
+function getGalleryImages(productId) {
+  return imagesStmt.all(productId).map((row) => ({ id: row.id, image: row.image, sortOrder: row.sort_order }));
+}
+
+// Appends newly uploaded gallery files, continuing the sort_order sequence
+// rather than restarting it — repeated edits keep adding to the end of the
+// gallery instead of ever reordering/clobbering existing images.
+function addGalleryImages(productId, files) {
+  if (!files || !files.length) return;
+  let nextOrder = maxSortOrderStmt.get(productId).maxOrder + 1;
+  for (const file of files) {
+    insertImageStmt.run(productId, `images/products/${file.filename}`, nextOrder);
+    nextOrder += 1;
+  }
+}
+
 function serializeProduct(row) {
   const price = row.price_cents;
   const rawCompareAt = row.compare_at_price_cents;
@@ -134,16 +174,16 @@ function removeUploadedImage(imagePath) {
 
 router.get("/products", (req, res) => {
   const rows = db.prepare("SELECT * FROM products ORDER BY created_at ASC").all();
-  res.json(rows.map((row) => ({ ...serializeProduct(row), stock: getStockMap(row.id) })));
+  res.json(rows.map((row) => ({ ...serializeProduct(row), stock: getStockMap(row.id), images: getGalleryImages(row.id) })));
 });
 
 router.get("/products/:id", (req, res) => {
   const row = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
   if (!row) return res.status(404).json({ error: "Product not found." });
-  res.json({ ...serializeProduct(row), stock: getStockMap(row.id) });
+  res.json({ ...serializeProduct(row), stock: getStockMap(row.id), images: getGalleryImages(row.id) });
 });
 
-router.post("/admin/products", requireAdmin, upload.single("image"), (req, res) => {
+router.post("/admin/products", requireAdmin, uploadWithGallery, (req, res) => {
   const { name, category, price } = req.body;
 
   if (!name || !category || !price) {
@@ -172,7 +212,8 @@ router.post("/admin/products", requireAdmin, upload.single("image"), (req, res) 
     id = `${id}-${crypto.randomBytes(3).toString("hex")}`;
   }
 
-  const image = req.file ? `images/products/${req.file.filename}` : null;
+  const coverFile = req.files && req.files.image ? req.files.image[0] : null;
+  const image = coverFile ? `images/products/${coverFile.filename}` : null;
   const sizesList = parseSizes(req.body.sizes);
   const sizes = JSON.stringify(sizesList);
 
@@ -182,12 +223,13 @@ router.post("/admin/products", requireAdmin, upload.single("image"), (req, res) 
   ).run(id, name, category, priceCents, compareAtPriceCents, image, req.body.description || "", sizes);
 
   syncProductStock(id, sizesList, parseStockInput(req.body.stock));
+  addGalleryImages(id, req.files && req.files.images);
 
   const row = db.prepare("SELECT * FROM products WHERE id = ?").get(id);
-  res.status(201).json({ ...serializeProduct(row), stock: getStockMap(id) });
+  res.status(201).json({ ...serializeProduct(row), stock: getStockMap(id), images: getGalleryImages(id) });
 });
 
-router.put("/admin/products/:id", requireAdmin, upload.single("image"), (req, res) => {
+router.put("/admin/products/:id", requireAdmin, uploadWithGallery, (req, res) => {
   const existing = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Product not found." });
 
@@ -222,8 +264,9 @@ router.put("/admin/products/:id", requireAdmin, upload.single("image"), (req, re
   const sizes = JSON.stringify(sizesList);
 
   let image = existing.image;
-  if (req.file) {
-    image = `images/products/${req.file.filename}`;
+  const coverFile = req.files && req.files.image ? req.files.image[0] : null;
+  if (coverFile) {
+    image = `images/products/${coverFile.filename}`;
     removeUploadedImage(existing.image);
   }
 
@@ -240,16 +283,72 @@ router.put("/admin/products/:id", requireAdmin, upload.single("image"), (req, re
     syncProductStock(req.params.id, sizesList, parseStockInput(req.body.stock));
   }
 
+  addGalleryImages(req.params.id, req.files && req.files.images);
+
   const row = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
-  res.json({ ...serializeProduct(row), stock: getStockMap(req.params.id) });
+  res.json({ ...serializeProduct(row), stock: getStockMap(req.params.id), images: getGalleryImages(req.params.id) });
+});
+
+// Removes one gallery image (DB row + file). Scoped to :id via getImageStmt's
+// own WHERE clause, so an imageId that belongs to a different product 404s
+// instead of silently deleting the wrong thing.
+router.delete("/admin/products/:id/images/:imageId", requireAdmin, (req, res) => {
+  const image = getImageStmt.get(req.params.imageId, req.params.id);
+  if (!image) return res.status(404).json({ error: "Image not found." });
+
+  deleteImageStmt.run(req.params.imageId, req.params.id);
+  removeUploadedImage(image.image);
+
+  res.json({ ok: true });
+});
+
+// Promotes an existing gallery image to be the product's primary/cover
+// image. The current cover (if any) moves INTO the gallery rather than
+// being discarded, so swapping the primary never loses an image — wrapped
+// in one transaction so a failure partway through can't leave the product
+// with no cover at all, or the same image counted twice.
+router.post("/admin/products/:id/images/:imageId/primary", requireAdmin, (req, res) => {
+  const product = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
+  if (!product) return res.status(404).json({ error: "Product not found." });
+
+  const target = getImageStmt.get(req.params.imageId, req.params.id);
+  if (!target) return res.status(404).json({ error: "Image not found." });
+
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    if (product.image) {
+      const nextOrder = maxSortOrderStmt.get(req.params.id).maxOrder + 1;
+      insertImageStmt.run(req.params.id, product.image, nextOrder);
+    }
+    db.prepare("UPDATE products SET image = ?, updated_at = datetime('now') WHERE id = ?").run(
+      target.image,
+      req.params.id
+    );
+    deleteImageStmt.run(req.params.imageId, req.params.id);
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+
+  const row = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
+  res.json({ ...serializeProduct(row), stock: getStockMap(req.params.id), images: getGalleryImages(req.params.id) });
 });
 
 router.delete("/admin/products/:id", requireAdmin, (req, res) => {
   const existing = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Product not found." });
 
+  // Fetched before the delete below — ON DELETE CASCADE removes these rows
+  // from the DB as part of that single statement, so the gallery's files
+  // still need to be unlinked explicitly afterward from this snapshot.
+  const galleryRows = imagesStmt.all(req.params.id);
+
   db.prepare("DELETE FROM products WHERE id = ?").run(req.params.id);
   removeUploadedImage(existing.image);
+  for (const row of galleryRows) {
+    removeUploadedImage(row.image);
+  }
 
   res.json({ ok: true });
 });

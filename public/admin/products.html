@@ -52,8 +52,13 @@
     <label for="description">Description</label>
     <textarea id="description" name="description"></textarea>
 
-    <label for="image">Image</label>
+    <label for="image">Cover Image</label>
     <input type="file" id="image" name="image" accept="image/*">
+    <div id="cover-image-preview" style="margin:4px 0 16px;"></div>
+
+    <label for="gallery-images">Gallery Images (additional photos &mdash; optional, you can add more later)</label>
+    <input type="file" id="gallery-images" name="images" accept="image/*" multiple>
+    <div id="gallery-images-list" style="display:flex; flex-wrap:wrap; gap:12px; margin:10px 0 20px;"></div>
 
     <div style="display:flex; gap:12px; margin-top:8px;">
       <button class="btn" type="submit" id="product-submit-btn">Add Product</button>

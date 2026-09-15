@@ -78,6 +78,22 @@ db.exec(`
     stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0),
     PRIMARY KEY (product_id, size)
   );
+
+  -- Additional gallery photos beyond products.image (which stays the
+  -- primary/cover shot used on grid cards and as the product page's initial
+  -- image) — this table only adds extra angles on top of it. ON DELETE
+  -- CASCADE mirrors the product_stock pattern above; the actual files still
+  -- need an explicit unlink in code (routes/products.js), since a cascade
+  -- only removes DB rows, not files on disk.
+  CREATE TABLE IF NOT EXISTS product_images (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    image TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_product_images_product_id ON product_images(product_id);
 `);
 
 // CREATE TABLE IF NOT EXISTS doesn't retroactively add columns to a table
