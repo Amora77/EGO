@@ -232,6 +232,47 @@ function initProductsPage() {
 }
 
 // --- Orders page ---
+
+// Friendly labels for every status an order can be in, including the
+// dormant Stripe ones ('pending', 'paid') so an old/disabled-payment order
+// still renders sensibly instead of showing a raw internal string.
+const ORDER_STATUS_LABELS = {
+  pending: "Pending",
+  paid: "Paid",
+  placed: "Placed",
+  confirmed: "Confirmed",
+  preparing: "Preparing",
+  shipped: "Shipped",
+  delivered: "Delivered",
+  cancelled: "Cancelled"
+};
+
+// Exactly mirrors the server-side transition matrix in routes/orders.js —
+// this only decides which buttons are *offered*; the server independently
+// re-validates every transition regardless of what's clicked here. Statuses
+// with no entry (delivered, cancelled, and the dormant pending/paid) render
+// no action buttons at all.
+const ORDER_NEXT_ACTIONS = {
+  placed: [
+    { action: "confirm", label: "Confirm" },
+    { action: "cancel", label: "Cancel" }
+  ],
+  confirmed: [
+    { action: "prepare", label: "Prepare" },
+    { action: "cancel", label: "Cancel" }
+  ],
+  preparing: [
+    { action: "ship", label: "Ship" },
+    { action: "cancel", label: "Cancel" }
+  ],
+  shipped: [{ action: "deliver", label: "Deliver" }]
+};
+
+function orderStatusBadge(status) {
+  const label = ORDER_STATUS_LABELS[status] || status;
+  return `<span class="status-badge status-${escapeHtml(status)}">${escapeHtml(label)}</span>`;
+}
+
 function initOrdersPage() {
   const table = document.getElementById("orders-tbody");
   if (!table) return;
@@ -264,29 +305,49 @@ function initOrdersPage() {
         <tr data-id="${o.id}">
           <td>${o.orderNumber}</td>
           <td>${new Date(o.createdAt).toLocaleString()}</td>
-          <td>${o.status}</td>
+          <td>${orderStatusBadge(o.status)}</td>
           <td>${o.paymentMethod === "cod" ? "Cash on Delivery" : "Card"}</td>
           <td>${o.email ? escapeHtml(o.email) : "—"}</td>
           <td>${formatPrice(o.amountTotal || 0)}</td>
           <td>${o.items.map((i) => `${i.qty}&times; ${escapeHtml(i.productName)}`).join("<br>")}</td>
           <td>${formatAddress(o.shippingAddress)}</td>
-          <td>${
-            o.paymentMethod === "cod" && o.status === "placed"
-              ? `<button type="button" class="btn btn-outline admin-row-btn" data-action="deliver">Mark Delivered</button>`
-              : ""
-          }</td>
+          <td>${(ORDER_NEXT_ACTIONS[o.status] || [])
+            .map(
+              (a) =>
+                `<button type="button" class="btn btn-outline admin-row-btn" data-action="${a.action}">${a.label}</button>`
+            )
+            .join("")}</td>
         </tr>
       `
       )
       .join("");
   }
 
+  const VALID_ACTIONS = ["confirm", "prepare", "ship", "deliver", "cancel"];
+
   table.addEventListener("click", async (e) => {
-    const btn = e.target.closest('button[data-action="deliver"]');
-    if (!btn) return;
+    const btn = e.target.closest("button[data-action]");
+    if (!btn || !VALID_ACTIONS.includes(btn.dataset.action)) return;
+    const action = btn.dataset.action;
     const id = btn.closest("tr").dataset.id;
-    await fetch(`/api/admin/orders/${encodeURIComponent(id)}/deliver`, { method: "POST" });
-    loadOrdersTable();
+
+    if (action === "cancel") {
+      const confirmed = confirm(
+        "Are you sure you want to cancel this order? The reserved stock will be returned to inventory."
+      );
+      if (!confirmed) return;
+    }
+
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/api/admin/orders/${encodeURIComponent(id)}/${action}`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Unable to update this order. It may have already changed status.");
+      }
+    } finally {
+      loadOrdersTable();
+    }
   });
 }
 

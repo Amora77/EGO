@@ -632,6 +632,36 @@ section {
   margin-right: 8px;
 }
 
+.status-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  background: var(--light-gray);
+  color: var(--gray);
+}
+
+.status-badge.status-confirmed,
+.status-badge.status-preparing {
+  background: var(--black);
+  color: var(--white);
+  opacity: 0.6;
+}
+
+.status-badge.status-shipped,
+.status-badge.status-delivered,
+.status-badge.status-paid {
+  background: var(--black);
+  color: var(--white);
+}
+
+.status-badge.status-cancelled {
+  background: var(--accent);
+  color: var(--white);
+}
+
 /* Footer */
 .site-footer {
   background: var(--black);

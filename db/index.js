@@ -95,6 +95,14 @@ ensureColumn("orders", "payment_method", "TEXT NOT NULL DEFAULT 'card'");
 ensureColumn("orders", "confirmation_token", "TEXT");
 ensureColumn("products", "compare_at_price_cents", "INTEGER");
 
+// Tracks when an order's status last changed (order lifecycle feature).
+// Added as a plain nullable column rather than a non-constant ALTER TABLE
+// default, then backfilled once — every status-transition endpoint sets it
+// explicitly going forward (see routes/orders.js). No separate history
+// table: this single timestamp is all the current requirements call for.
+ensureColumn("orders", "updated_at", "TEXT");
+db.exec("UPDATE orders SET updated_at = created_at WHERE updated_at IS NULL");
+
 // SQLite's ALTER TABLE ADD COLUMN can't attach a UNIQUE constraint directly,
 // so enforce it with an index instead (NULLs — i.e. card orders — don't
 // conflict with each other under SQLite's uniqueness rules).

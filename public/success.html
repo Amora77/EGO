@@ -60,6 +60,25 @@
     );
   }
 
+  // Friendly labels for the order lifecycle. A freshly-placed order is
+  // always "placed" (card orders only reach this page once already 'paid'
+  // via the webhook) — mirrors the same map in js/admin.js and js/account.js.
+  const ORDER_STATUS_LABELS = {
+    pending: "Pending",
+    paid: "Paid",
+    placed: "Placed",
+    confirmed: "Confirmed",
+    preparing: "Preparing",
+    shipped: "Shipped",
+    delivered: "Delivered",
+    cancelled: "Cancelled"
+  };
+
+  function orderStatusBadge(status) {
+    const label = ORDER_STATUS_LABELS[status] || status;
+    return `<span class="status-badge status-${escapeHtml(status)}">${escapeHtml(label)}</span>`;
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     updateCartBadge();
 
@@ -75,6 +94,7 @@
       summary.innerHTML = `
         <div class="summary-box">
           <div class="summary-row"><span>Order Number</span><span>${order.orderNumber}</span></div>
+          <div class="summary-row"><span>Status</span><span>${orderStatusBadge(order.status)}</span></div>
           ${order.items
             .map(
               (i) => `

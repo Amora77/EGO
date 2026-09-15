@@ -9,6 +9,25 @@ function escapeHtml(value) {
   );
 }
 
+// Friendly labels for the full order lifecycle, including the dormant
+// Stripe states ('pending', 'paid') so an old card order still renders
+// sensibly. Mirrors the same map in public/js/admin.js.
+const ORDER_STATUS_LABELS = {
+  pending: "Pending",
+  paid: "Paid",
+  placed: "Placed",
+  confirmed: "Confirmed",
+  preparing: "Preparing",
+  shipped: "Shipped",
+  delivered: "Delivered",
+  cancelled: "Cancelled"
+};
+
+function orderStatusBadge(status) {
+  const label = ORDER_STATUS_LABELS[status] || status;
+  return `<span class="status-badge status-${escapeHtml(status)}">${escapeHtml(label)}</span>`;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const guestView = document.getElementById("guest-view");
   const accountView = document.getElementById("account-view");
@@ -168,7 +187,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="summary-box" style="margin-bottom:20px;">
           <h2 style="display:flex; justify-content:space-between; align-items:baseline;">
             <span>${o.orderNumber} &middot; ${new Date(o.createdAt).toLocaleDateString()}</span>
-            <span style="font-size:12px; text-transform:uppercase; color:${o.status === "paid" || o.status === "delivered" ? "#111111" : "#6b6b6b"};">${o.status}</span>
+            ${orderStatusBadge(o.status)}
           </h2>
           <div class="summary-row"><span>Payment</span><span>${o.paymentMethod === "cod" ? "Cash on Delivery" : "Card"}</span></div>
           ${o.items

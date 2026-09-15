@@ -2,7 +2,12 @@ const crypto = require("crypto");
 const express = require("express");
 const db = require("../db");
 const { requireAdmin, requireAuth } = require("../lib/auth");
-const { sendOrderConfirmation } = require("../lib/email");
+const {
+  sendOrderConfirmation,
+  sendOrderConfirmedEmail,
+  sendOrderShippedEmail,
+  sendOrderCancelledEmail
+} = require("../lib/email");
 
 const MAX_QTY_PER_ITEM = 20;
 const ALLOWED_COUNTRIES = ["EG"];
@@ -143,6 +148,78 @@ module.exports = function createOrdersRouter({ stripe, clientUrl, checkoutLimite
 
       db.exec("COMMIT");
       return orderId;
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  // --- Order lifecycle (COD fulfillment states) ---
+  //
+  // Dormant Stripe states ('pending', 'paid') are untouched by any of this —
+  // they're not admin-actionable here and none of the statements below can
+  // ever match a row in either state.
+  //
+  //   placed    -> confirmed, cancelled
+  //   confirmed -> preparing, cancelled
+  //   preparing -> shipped, cancelled
+  //   shipped   -> delivered
+  //   delivered -> (terminal)
+  //   cancelled -> (terminal)
+  //
+  // Every transition is a single "UPDATE ... WHERE status = <expected>"
+  // (or, for cancel, "WHERE status IN (...)") — the same guarded-update
+  // pattern already used for stock decrement. changes !== 1 means the order
+  // wasn't in the state this action requires (already moved on, moved by a
+  // concurrent request, or never valid for this action) — that's a 409, not
+  // a 500, and no further writes happen.
+  const confirmStmt = db.prepare(
+    "UPDATE orders SET status = 'confirmed', updated_at = datetime('now') WHERE id = ? AND status = 'placed'"
+  );
+  const prepareStmt = db.prepare(
+    "UPDATE orders SET status = 'preparing', updated_at = datetime('now') WHERE id = ? AND status = 'confirmed'"
+  );
+  const shipStmt = db.prepare(
+    "UPDATE orders SET status = 'shipped', updated_at = datetime('now') WHERE id = ? AND status = 'preparing'"
+  );
+  const deliverStmt = db.prepare(
+    "UPDATE orders SET status = 'delivered', updated_at = datetime('now') WHERE id = ? AND status = 'shipped'"
+  );
+  const cancelStmt = db.prepare(
+    `UPDATE orders SET status = 'cancelled', updated_at = datetime('now')
+     WHERE id = ? AND status IN ('placed', 'confirmed', 'preparing')`
+  );
+  // No WHERE stock >= ... guard needed here (unlike the decrement) — adding
+  // back can never violate CHECK (stock >= 0). If the product/size row no
+  // longer exists (e.g. the product was deleted, cascading away its
+  // product_stock rows), this simply matches 0 rows and is a safe no-op —
+  // the cancellation itself is still valid and already committed by the
+  // time this runs.
+  const restockStmt = db.prepare("UPDATE product_stock SET stock = stock + ? WHERE product_id = ? AND size = ?");
+
+  // Cancels an order and restores its items' stock in one transaction. The
+  // guarded cancelStmt above is the *only* thing preventing a double
+  // restock: if two cancel requests race, only the first UPDATE can match
+  // (status is already 'cancelled' by the time the second runs), so the
+  // second sees changes !== 1 and does no restocking at all — no separate
+  // "restocked" flag is needed. Any failure partway through rolls back both
+  // the status change and any restocking already done in this transaction.
+  function cancelOrderAndRestock(orderId) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const result = cancelStmt.run(orderId);
+      if (result.changes !== 1) {
+        db.exec("ROLLBACK");
+        return { ok: false };
+      }
+
+      for (const item of itemsStmt.all(orderId)) {
+        if (!item.size) continue;
+        restockStmt.run(item.qty, item.product_id, item.size);
+      }
+
+      db.exec("COMMIT");
+      return { ok: true };
     } catch (err) {
       db.exec("ROLLBACK");
       throw err;
@@ -298,6 +375,7 @@ module.exports = function createOrdersRouter({ stripe, clientUrl, checkoutLimite
     res.json({
       orderNumber: formatOrderNumber(order.id),
       email: order.email,
+      status: order.status,
       ...orderBreakdown(order, items),
       amountTotal: order.amount_total,
       paymentMethod: order.payment_method,
@@ -317,6 +395,7 @@ module.exports = function createOrdersRouter({ stripe, clientUrl, checkoutLimite
     res.json({
       orderNumber: formatOrderNumber(order.id),
       email: order.email,
+      status: order.status,
       ...orderBreakdown(order, items),
       amountTotal: order.amount_total,
       paymentMethod: order.payment_method,
@@ -368,13 +447,84 @@ module.exports = function createOrdersRouter({ stripe, clientUrl, checkoutLimite
     );
   });
 
+  router.post("/admin/orders/:id/confirm", requireAdmin, (req, res) => {
+    const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(req.params.id);
+    if (!order) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+    if (confirmStmt.run(order.id).changes !== 1) {
+      return res.status(409).json({ error: "Order is not in a state that allows this action." });
+    }
+    res.json({ ok: true });
+
+    // Fire-and-forget, after the status change has already committed.
+    sendOrderConfirmedEmail({ email: order.email, orderNumber: formatOrderNumber(order.id) });
+  });
+
+  router.post("/admin/orders/:id/prepare", requireAdmin, (req, res) => {
+    const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(req.params.id);
+    if (!order) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+    if (prepareStmt.run(order.id).changes !== 1) {
+      return res.status(409).json({ error: "Order is not in a state that allows this action." });
+    }
+    res.json({ ok: true });
+  });
+
+  router.post("/admin/orders/:id/ship", requireAdmin, (req, res) => {
+    const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(req.params.id);
+    if (!order) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+    if (shipStmt.run(order.id).changes !== 1) {
+      return res.status(409).json({ error: "Order is not in a state that allows this action." });
+    }
+    res.json({ ok: true });
+
+    sendOrderShippedEmail({ email: order.email, orderNumber: formatOrderNumber(order.id) });
+  });
+
+  // Tightened: previously set status = 'delivered' unconditionally,
+  // regardless of the order's current status. Now, like every other
+  // transition, it only succeeds from the one state that's actually valid.
   router.post("/admin/orders/:id/deliver", requireAdmin, (req, res) => {
     const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(req.params.id);
     if (!order) {
       return res.status(404).json({ error: "Order not found." });
     }
-    db.prepare("UPDATE orders SET status = 'delivered' WHERE id = ?").run(order.id);
+    if (deliverStmt.run(order.id).changes !== 1) {
+      return res.status(409).json({ error: "Order is not in a state that allows this action." });
+    }
     res.json({ ok: true });
+  });
+
+  router.post("/admin/orders/:id/cancel", requireAdmin, (req, res) => {
+    const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(req.params.id);
+    if (!order) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+
+    let result;
+    try {
+      result = cancelOrderAndRestock(order.id);
+    } catch (err) {
+      console.error("Order cancellation error:", err.message);
+      return res.status(500).json({ error: "Unable to cancel this order. Please try again." });
+    }
+
+    if (!result.ok) {
+      return res.status(409).json({ error: "Order is not in a state that allows this action." });
+    }
+
+    res.json({ ok: true });
+
+    // Only after the transaction (status change + restock) has committed.
+    sendOrderCancelledEmail({
+      email: order.email,
+      orderNumber: formatOrderNumber(order.id),
+      amountTotal: order.amount_total
+    });
   });
 
   return router;
