@@ -127,14 +127,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.body.appendChild(lightbox);
     lightboxImg = lightbox.querySelector(".lightbox-img");
 
+    // Captured fresh on every open rather than assumed to be "" — restoring
+    // whatever was actually there before locking is safer than hardcoding a
+    // value back, in case anything else ever sets body.style.overflow.
+    let previousBodyOverflow = "";
+
     function openLightbox() {
       lightboxImg.src = allImages[currentImageIndex];
       lightbox.style.display = "flex";
       lightboxOpen = true;
+      previousBodyOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
     }
     function closeLightbox() {
       lightbox.style.display = "none";
       lightboxOpen = false;
+      document.body.style.overflow = previousBodyOverflow;
     }
 
     galleryMain.addEventListener("click", openLightbox);

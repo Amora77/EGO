@@ -113,7 +113,17 @@ img {
 }
 
 .nav-toggle {
+  /* Hidden on desktop (unchanged) — the mobile media query below switches
+     this to "flex" rather than the old "block", so these sizing/centering
+     properties actually take effect once it's shown. */
   display: none;
+  /* min-width/min-height (not padding) so the ~44x44px tap target is exact
+     regardless of the browser's own default <button> padding — the glyph's
+     font-size is untouched, it's just centered in a larger invisible box. */
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
   font-size: 24px;
@@ -551,8 +561,8 @@ section {
 }
 
 .qty-control button {
-  width: 36px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border: none;
   background: none;
   font-size: 16px;
@@ -621,7 +631,9 @@ section {
   text-transform: uppercase;
   text-decoration: underline;
   cursor: pointer;
-  padding: 0;
+  /* Vertical-only padding — widens the tap target without touching the
+     button's horizontal position or visible size. */
+  padding: 10px 0;
   color: var(--gray);
 }
 
@@ -712,7 +724,10 @@ section {
   padding: 12px 14px;
   border: 1px solid var(--light-gray);
   font-family: inherit;
-  font-size: 14px;
+  /* 16px, not 14px: below 16px, iOS Safari auto-zooms the viewport on focus
+     — disruptive on every form that reuses this class (checkout, login,
+     signup, contact). */
+  font-size: 16px;
   margin-bottom: 20px;
   background: var(--white);
 }
@@ -814,6 +829,13 @@ section {
   font-size: 14px;
 }
 
+/* inline-block so vertical padding reliably grows the tap target, without
+   changing the link's visible text or the footer's layout. */
+.footer-grid li a {
+  display: inline-block;
+  padding: 6px 0;
+}
+
 .footer-grid p {
   font-size: 14px;
   opacity: 0.7;
@@ -861,6 +883,19 @@ section {
     grid-template-columns: 1fr;
   }
 
+  /* Capped so the hero image doesn't consume the entire first mobile
+     viewport — price, size, and Add to Cart become visible sooner without
+     scrolling past a full screen of imagery first. aspect-ratio (still set
+     on the base rule) is simply overridden by this max-height on mobile;
+     object-fit: cover on the <img> already prevents any stretching/
+     distortion regardless of which one ends up governing the box's height.
+     55vh measured as a no-op at the tested phone widths (the 4:5
+     aspect-ratio's own height was already shorter than 55% of the
+     viewport) — 42vh actually binds. */
+  .product-detail .gallery-main {
+    max-height: 42vh;
+  }
+
   .main-nav {
     position: fixed;
     top: 72px;
@@ -886,7 +921,7 @@ section {
   }
 
   .nav-toggle {
-    display: block;
+    display: flex;
   }
 }
 
