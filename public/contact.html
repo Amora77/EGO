@@ -62,6 +62,36 @@
 
 <footer class="site-footer">
   <div class="container">
+    <div class="footer-grid">
+      <div>
+        <h3>EGO</h3>
+        <p>A clothing brand for people who define themselves. Designed with intent, made to last.</p>
+      </div>
+      <div>
+        <h3>Shop</h3>
+        <ul>
+          <li><a href="shop.html?category=Hoodies">Hoodies</a></li>
+          <li><a href="shop.html?category=T-Shirts">T-Shirts</a></li>
+          <li><a href="shop.html?category=Jackets">Jackets</a></li>
+          <li><a href="shop.html?category=Accessories">Accessories</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Company</h3>
+        <ul>
+          <li><a href="about.html">About</a></li>
+          <li><a href="contact.html">Contact</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Help</h3>
+        <ul>
+          <li><a href="shipping.html">Shipping</a></li>
+          <li><a href="returns.html">Returns &amp; Exchanges</a></li>
+          <li><a href="size-guide.html">Size Guide</a></li>
+        </ul>
+      </div>
+    </div>
     <div class="footer-bottom">
       <span>&copy; 2026 EGO. All rights reserved.</span>
       <span>Designed for those who define themselves.</span>
@@ -72,11 +102,40 @@
 <script src="js/cart.js"></script>
 <script src="js/main.js"></script>
 <script>
-  document.getElementById("contact-form").addEventListener("submit", (e) => {
+  document.getElementById("contact-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    document.getElementById("contact-msg").textContent =
-      "Thanks for reaching out! We'll reply within 1-2 business days.";
-    e.target.reset();
+    const form = e.target;
+    const btn = form.querySelector('button[type="submit"]');
+    const msg = document.getElementById("contact-msg");
+    msg.style.color = "#c8102e";
+    msg.textContent = "";
+    btn.disabled = true;
+    btn.textContent = "Sending...";
+
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: document.getElementById("name").value,
+          email: document.getElementById("email").value,
+          message: document.getElementById("message").value
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Unable to send your message. Please try again.");
+
+      // Only shown once the server has confirmed the message was actually
+      // sent — never on a fake/optimistic assumption.
+      msg.style.color = "#111111";
+      msg.textContent = "Thanks for reaching out! We'll reply within 1-2 business days.";
+      form.reset();
+    } catch (err) {
+      msg.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Send Message";
+    }
   });
 </script>
 </body>

@@ -578,6 +578,22 @@ section {
   align-items: start;
 }
 
+/* Policy pages (shipping/returns/size guide) — a clearly marked box for
+   details that aren't finalized yet, so a placeholder never reads as a
+   real, settled policy. */
+.policy-placeholder {
+  background: var(--off-white);
+  border-left: 3px solid var(--accent);
+  padding: 14px 18px;
+  font-size: 14px;
+  color: var(--gray);
+  margin: 20px 0;
+}
+
+.policy-placeholder strong {
+  color: var(--black);
+}
+
 .contact-form label {
   display: block;
   font-size: 12px;

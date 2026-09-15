@@ -1,3 +1,7 @@
+// Cash on Delivery is the only payment method the storefront currently
+// offers (see cart-page.js) — Stripe/card stays implemented and dormant
+// server-side for a future phase, so startCardCheckout below is kept but no
+// longer called from here.
 async function startCheckout() {
   const btn = document.getElementById("checkout-btn");
   const msg = document.getElementById("checkout-msg");
@@ -5,15 +9,8 @@ async function startCheckout() {
 
   if (!lines.length) return;
 
-  const method = (document.querySelector('input[name="payment-method"]:checked') || {}).value || "card";
-
   msg.textContent = "";
-
-  if (method === "cod") {
-    await startCodCheckout(lines, btn, msg);
-  } else {
-    await startCardCheckout(lines, btn, msg);
-  }
+  await startCodCheckout(lines, btn, msg);
 }
 
 async function startCardCheckout(lines, btn, msg) {

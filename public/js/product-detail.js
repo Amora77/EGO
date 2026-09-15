@@ -45,7 +45,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       <p class="description">${product.description}</p>
 
       <div class="size-picker">
-        <div class="label">Size</div>
+        <div class="label">Size &middot; <a href="size-guide.html" style="text-transform:none; letter-spacing:normal; font-weight:400; text-decoration:underline;">Size Guide</a></div>
         <div class="size-options">
           ${product.sizes
             .map((s) => {

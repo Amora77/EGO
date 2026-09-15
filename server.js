@@ -12,6 +12,7 @@ const { sendOrderConfirmation } = require("./lib/email");
 const createAuthRouter = require("./routes/auth");
 const productsRouter = require("./routes/products");
 const createOrdersRouter = require("./routes/orders");
+const createContactRouter = require("./routes/contact");
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecretKey ? require("stripe")(stripeSecretKey) : null;
@@ -122,10 +123,20 @@ const checkoutLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again later." }
 });
+// Tighter than the others — a contact form has no legitimate reason to be
+// submitted more than a handful of times in a row from the same visitor.
+const contactLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many messages. Please try again later." }
+});
 
 app.use("/api/auth", authLimiter, createAuthRouter({ clientUrl: CLIENT_URL }));
 app.use("/api", productsRouter);
 app.use("/api", createOrdersRouter({ stripe, clientUrl: CLIENT_URL, checkoutLimiter }));
+app.use("/api", createContactRouter({ limiter: contactLimiter }));
 
 // Catch-all error handler: never leak stack traces or file paths to the
 // client (the default Express handler does exactly that), regardless of

@@ -228,8 +228,12 @@ module.exports = function createOrdersRouter({ stripe, clientUrl, checkoutLimite
 
   router.post("/create-checkout-session", limiter, async (req, res) => {
     if (!stripe) {
+      // Customer-safe message only — no mention of STRIPE_SECRET_KEY or any
+      // other internal configuration detail. Stripe itself stays disabled;
+      // this is purely about what a customer sees if this endpoint is ever
+      // reached (the current storefront UI no longer offers Card at all).
       return res.status(503).json({
-        error: "Payments are not configured yet. Set STRIPE_SECRET_KEY on the server."
+        error: "Card payment isn't available right now. Please choose Cash on Delivery."
       });
     }
 

@@ -53,15 +53,10 @@ function renderCartPage() {
 
     <div style="margin:20px 0 4px;">
       <div class="label" style="font-size:12px; letter-spacing:1.5px; text-transform:uppercase; font-weight:600; margin-bottom:10px;">Payment Method</div>
-      <label style="display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:14px; font-weight:400; text-transform:none; letter-spacing:normal;">
-        <input type="radio" name="payment-method" value="card" checked> Card
-      </label>
-      <label style="display:flex; align-items:center; gap:8px; font-size:14px; font-weight:400; text-transform:none; letter-spacing:normal;">
-        <input type="radio" name="payment-method" value="cod"> Cash on Delivery
-      </label>
+      <p style="font-size:14px; margin:0;">Cash on Delivery — pay in cash when your order arrives.</p>
     </div>
 
-    <div class="contact-form" id="cod-fields" style="display:none; margin-top:16px;">
+    <div class="contact-form" id="cod-fields" style="margin-top:16px;">
       <label for="cod-name">Full Name</label>
       <input type="text" id="cod-name">
 
@@ -95,13 +90,6 @@ function renderCartPage() {
     <button class="btn" id="checkout-btn" style="width:100%;margin-top:20px;">Checkout</button>
     <div class="add-to-cart-msg" id="checkout-msg"></div>
   `;
-
-  const codFields = document.getElementById("cod-fields");
-  summaryContainer.querySelectorAll('input[name="payment-method"]').forEach((radio) => {
-    radio.addEventListener("change", () => {
-      codFields.style.display = radio.checked && radio.value === "cod" ? "block" : "none";
-    });
-  });
 
   document.getElementById("checkout-btn").addEventListener("click", startCheckout);
 }
